@@ -1,0 +1,2 @@
+# rustacata
+Catamorphism in Rust 
