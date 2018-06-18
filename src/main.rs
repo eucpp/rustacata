@@ -25,7 +25,7 @@ fn transform<Tr: ExprTransformer>(tr: &Tr, inh: Tr::Inh, x: &Expr) -> Tr::Synth 
 }
 
 // Evaluator is a `newtype` for unit.
-// We use it only to derive `impl ExprCata` on it.
+// We use it only to derive `impl ExprTransformer` on it.
 struct Evaluator(());
 
 impl ExprTransformer for Evaluator {
@@ -45,6 +45,56 @@ impl ExprTransformer for Evaluator {
     }
 }
 
+// Mapper transformer
+struct Mapper(());
+
+// Default implementation for `map`;
+// We should (somehow) be able to override it partly in other implementations
+impl ExprTransformer for Mapper {
+    type Inh = ();
+    type Synth = Expr;
+
+    fn fold_value(&self, inh: Self::Inh, v: &i32) -> Self::Synth {
+        Expr::Value(*v)
+    }
+
+    fn fold_add(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        Expr::Add(
+            Box::new(transform(self, inh, &**e1)),
+            Box::new(transform(self, inh, &**e2)),
+        )
+    }
+
+    fn fold_mult(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        Expr::Mult(
+            Box::new(transform(self, inh, &**e1)),
+            Box::new(transform(self, inh, &**e2)),
+        )
+    }
+}
+
+struct IncMapper(Mapper);
+
+impl ExprTransformer for IncMapper {
+    type Inh = <Mapper as ExprTransformer>::Inh;
+    type Synth = <Mapper as ExprTransformer>::Synth;
+
+    fn fold_value(&self, inh: Self::Inh, v: &i32) -> Self::Synth {
+        Expr::Value(*v + 1)
+    }
+
+    fn fold_add(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+//        Expr::Add(transform(self, inh, &**e1), transform(self, inh, &**e2))
+//        self.0
+        Mapper::fold_add(&self.0, inh, e1, e2)
+    }
+
+    fn fold_mult(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        Mapper::fold_mult(&self.0, inh, e1, e2)
+    }
+}
+
+
 fn main() {
     // 2 * (7 + 1) = 16
     let e = Expr::Mult(
@@ -56,4 +106,9 @@ fn main() {
     );
     let v = transform(&Evaluator(()), (), &e);
     println!("result={}", v);
+
+    // 3 * (8 + 2) = 30
+    let e_inc = transform(&IncMapper(Mapper(())), (), &e);
+    let v_inc = transform(&Evaluator(()), (), &e_inc);
+    println!("result={}", v_inc);
 }
