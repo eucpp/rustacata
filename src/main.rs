@@ -56,54 +56,54 @@ impl ExprTransformer for Evaluator {
     }
 }
 
-//// Mapper transformer
-//struct Mapper(());
-//
-//// Default implementation for `map`;
-//// We should (somehow) be able to override it partly in other implementations
-//impl ExprTransformer for Mapper {
-//    type Inh = ();
-//    type Synth = Expr;
-//
-//    fn fold_value(&self, inh: Self::Inh, v: &i32) -> Self::Synth {
-//        Expr::Value(*v)
-//    }
-//
-//    fn fold_add(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
-//        Expr::Add(
-//            Box::new(transform(self, inh, &**e1)),
-//            Box::new(transform(self, inh, &**e2)),
-//        )
-//    }
-//
-//    fn fold_mult(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
-//        Expr::Mult(
-//            Box::new(transform(self, inh, &**e1)),
-//            Box::new(transform(self, inh, &**e2)),
-//        )
-//    }
-//}
-//
-//struct IncMapper(Mapper);
-//
-//impl ExprTransformer for IncMapper {
-//    type Inh = <Mapper as ExprTransformer>::Inh;
-//    type Synth = <Mapper as ExprTransformer>::Synth;
-//
-//    fn fold_value(&self, inh: Self::Inh, v: &i32) -> Self::Synth {
-//        Expr::Value(*v + 1)
-//    }
-//
-//    fn fold_add(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
-////        Expr::Add(transform(self, inh, &**e1), transform(self, inh, &**e2))
-////        self.0
-//        Mapper::fold_add(&self, inh, e1, e2)
-//    }
-//
-//    fn fold_mult(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
-//        Mapper::fold_mult(&self, inh, e1, e2)
-//    }
-//}
+// Mapper transformer
+struct Mapper(());
+
+// Default implementation for `map`;
+// We should (somehow) be able to override it partly in other implementations
+impl ExprTransformer for Mapper {
+    type Inh = ();
+    type Synth = Expr;
+
+    fn fold_value<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, v: &i32) -> Self::Synth {
+        Expr::Value(*v)
+    }
+
+    fn fold_add<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        Expr::Add(
+            Box::new(cata.transform(inh, &**e1)),
+            Box::new(cata.transform(inh, &**e2)),
+        )
+    }
+
+    fn fold_mult<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        Expr::Mult(
+            Box::new(cata.transform(inh, &**e1)),
+            Box::new(cata.transform(inh, &**e2)),
+        )
+    }
+}
+
+struct IncMapper(Mapper);
+
+impl ExprTransformer for IncMapper {
+    type Inh = <Mapper as ExprTransformer>::Inh;
+    type Synth = <Mapper as ExprTransformer>::Synth;
+
+    fn fold_value<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, v: &i32) -> Self::Synth {
+        Expr::Value(*v + 1)
+    }
+
+    fn fold_add<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+//        Expr::Add(transform(self, inh, &**e1), transform(self, inh, &**e2))
+//        self.0
+        Mapper::fold_add(cata, inh, e1, e2)
+    }
+
+    fn fold_mult<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        Mapper::fold_mult(cata, inh, e1, e2)
+    }
+}
 
 
 fn main() {
@@ -120,7 +120,7 @@ fn main() {
     println!("result={}", v);
 
     // 3 * (8 + 2) = 30
-//    let e_inc = transform(&IncMapper(Mapper(())), (), &e);
-//    let v_inc = transform(&Evaluator(()), (), &e_inc);
-//    println!("result={}", v_inc);
+    let e_inc = ExprCataImpl(IncMapper(Mapper(()))).transform((), &e);
+    let v_inc = ExprCataImpl(Evaluator(())).transform((), &e_inc);
+    println!("result={}", v_inc);
 }
