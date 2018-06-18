@@ -1,25 +1,26 @@
 
 // Expression AST type
-enum Expr<T> {
-    Value(T),
-    Add(Box<Expr<T>>, Box<Expr<T>>),
-    Mult(Box<Expr<T>>, Box<Expr<T>>),
+enum Expr {
+    Value(i32),
+    Add(Box<Expr>, Box<Expr>),
+    Mult(Box<Expr>, Box<Expr>),
 }
 
 // Catamorphism trait for Expression AST (this will be generated automatically in future)
-trait ExprTransformer<T> {
+trait ExprTransformer {
+    type Inh;
     type Synth;
 
-    fn fold_value(&self, v: &T) -> Self::Synth;
-    fn fold_add(&self, e1: &Box<Expr<T>>, e2: &Box<Expr<T>>) -> Self::Synth;
-    fn fold_mult(&self, e1: &Box<Expr<T>>, e2: &Box<Expr<T>>) -> Self::Synth;
+    fn fold_value(&self, inh: Self::Inh, v: &i32) -> Self::Synth;
+    fn fold_add(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
+    fn fold_mult(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
+}
 
-    fn transform(&self, x: &Expr<T>) -> Self::Synth {
-        match x {
-            Expr::Value(ref v) => self.fold_value(v),
-            Expr::Add(ref e1, ref e2) => self.fold_add(e1, e2),
-            Expr::Mult(ref e1, ref e2) => self.fold_mult(e1, e2),
-        }
+fn transform<Tr: ExprTransformer>(tr: &Tr, inh: Tr::Inh, x: &Expr) -> Tr::Synth {
+    match x {
+        Expr::Value(ref v) => tr.fold_value(inh, v),
+        Expr::Add(ref e1, ref e2) => tr.fold_add(inh, e1, e2),
+        Expr::Mult(ref e1, ref e2) => tr.fold_mult(inh, e1, e2),
     }
 }
 
@@ -27,19 +28,20 @@ trait ExprTransformer<T> {
 // We use it only to derive `impl ExprCata` on it.
 struct Evaluator(());
 
-impl ExprTransformer<i32> for Evaluator {
+impl ExprTransformer for Evaluator {
+    type Inh = ();
     type Synth = i32;
 
-    fn fold_value(&self, v: &i32) -> Self::Synth {
+    fn fold_value(&self, inh: Self::Inh, v: &i32) -> Self::Synth {
         *v
     }
 
-    fn fold_add(&self, e1: &Box<Expr<i32>>, e2: &Box<Expr<i32>>) -> Self::Synth {
-        self.transform(&**e1) + self.transform(&**e2)
+    fn fold_add(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        transform(self, inh, &**e1) + transform(self, inh, &**e2)
     }
 
-    fn fold_mult(&self, e1: &Box<Expr<i32>>, e2: &Box<Expr<i32>>) -> Self::Synth {
-        Evaluator::transform(self, &**e1) * Evaluator::transform(self, &**e2)
+    fn fold_mult(&self, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        transform(self, inh, &**e1) * transform(self, inh, &**e2)
     }
 }
 
@@ -52,6 +54,6 @@ fn main() {
             Box::new(Expr::Value(1))
         ))
     );
-    let v = Evaluator::transform(&Evaluator(()), &e);
+    let v = transform(&Evaluator(()), (), &e);
     println!("result={}", v);
 }
