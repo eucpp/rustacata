@@ -1,4 +1,3 @@
-
 // Expression AST type
 enum Expr {
     Value(i32),
@@ -19,9 +18,11 @@ trait ExprTransformation {
     fn fold_mult<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
 }
 
-struct ExprTransformer<Tm>();
+struct ExprTransformer<'a, Tm: 'a> {
+    tm: &'a Tm
+}
 
-impl<Tm> Transformer<Expr, Tm::Inh, Tm::Synth> for ExprTransformer<Tm>
+impl<'a, Tm> Transformer<Expr, Tm::Inh, Tm::Synth> for ExprTransformer<'a, Tm>
 where
     Tm : ExprTransformation
 {
@@ -110,13 +111,18 @@ fn main() {
             Box::new(Expr::Value(1))
         ))
     );
+
+    let evaluator = ExprTransformer{ tm: &Evaluator(()) };
 //    let v = transform(&Evaluator(()), (), &e);
-    let v = ExprTransformer
-        (Evaluator(())).transform((), &e);
+//    let v = ExprTransformer.transform((), &e);
+//        (Evaluator(())).transform((), &e);
+    let v = evaluator.transform((), &e);
     println!("result={}", v);
 
+    let inc_mapper = ExprTransformer{ tm: &IncMapper(Mapper(())) };
+
     // 3 * (8 + 2) = 30
-    let e_inc = ExprTransformer(IncMapper(Mapper(()))).transform((), &e);
-    let v_inc = ExprTransformer(Evaluator(())).transform((), &e_inc);
+    let e_inc = inc_mapper.transform((), &e);
+    let v_inc = evaluator.transform((), &e_inc);
     println!("result={}", v_inc);
 }
