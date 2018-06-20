@@ -6,53 +6,50 @@ enum Expr {
     Mult(Box<Expr>, Box<Expr>),
 }
 
-trait ExprCata<I, S> {
-    fn transform(&self, inh: I, x: &Expr) -> S;
+trait Transformer<T, I, S> {
+    fn transform(&self, inh: I, x: &T) -> S;
 }
 
-// Catamorphism trait for Expression AST (this will be generated automatically in future)
-trait ExprTransformer {
+trait ExprTransformation {
     type Inh;
     type Synth;
 
-    fn fold_value<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, v: &i32) -> Self::Synth;
-    fn fold_add<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
-    fn fold_mult<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
+    fn fold_value<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, v: &i32) -> Self::Synth;
+    fn fold_add<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
+    fn fold_mult<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
 }
 
-struct ExprCataImpl<Tr>(Tr);
+struct ExprTransformer<Tm>();
 
-impl<Tr> ExprCata<Tr::Inh, Tr::Synth> for ExprCataImpl<Tr>
+impl<Tm> Transformer<Expr, Tm::Inh, Tm::Synth> for ExprTransformer<Tm>
 where
-    Tr : ExprTransformer
+    Tm : ExprTransformation
 {
-    fn transform(&self, inh: Tr::Inh, x: &Expr) -> Tr::Synth {
+    fn transform(&self, inh: Tm::Inh, x: &Expr) -> Tm::Synth {
         match x {
-            Expr::Value(ref v) => Tr::fold_value(self, inh, v),
-            Expr::Add(ref e1, ref e2) => Tr::fold_add(self, inh, e1, e2),
-            Expr::Mult(ref e1, ref e2) => Tr::fold_mult(self, inh, e1, e2),
+            Expr::Value(ref v) => Tm::fold_value(self, inh, v),
+            Expr::Add(ref e1, ref e2) => Tm::fold_add(self, inh, e1, e2),
+            Expr::Mult(ref e1, ref e2) => Tm::fold_mult(self, inh, e1, e2),
         }
     }
 }
 
-// Evaluator is a `newtype` for unit.
-// We use it only to derive `impl ExprTransformer` on it.
 struct Evaluator(());
 
-impl ExprTransformer for Evaluator {
+impl ExprTransformation for Evaluator {
     type Inh = ();
     type Synth = i32;
 
-    fn fold_value<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, v: &i32) -> Self::Synth {
+    fn fold_value<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, v: &i32) -> Self::Synth {
         *v
     }
 
-    fn fold_add<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
-        cata.transform(inh, &**e1) + cata.transform(inh, &**e2)
+    fn fold_add<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        tr.transform(inh, &**e1) + tr.transform(inh, &**e2)
     }
 
-    fn fold_mult<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
-        cata.transform(inh, &**e1) * cata.transform(inh, &**e2)
+    fn fold_mult<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        tr.transform(inh, &**e1) * tr.transform(inh, &**e2)
     }
 }
 
@@ -61,47 +58,45 @@ struct Mapper(());
 
 // Default implementation for `map`;
 // We should (somehow) be able to override it partly in other implementations
-impl ExprTransformer for Mapper {
+impl ExprTransformation for Mapper {
     type Inh = ();
     type Synth = Expr;
 
-    fn fold_value<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, v: &i32) -> Self::Synth {
+    fn fold_value<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, v: &i32) -> Self::Synth {
         Expr::Value(*v)
     }
 
-    fn fold_add<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+    fn fold_add<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
         Expr::Add(
-            Box::new(cata.transform(inh, &**e1)),
-            Box::new(cata.transform(inh, &**e2)),
+            Box::new(tr.transform(inh, &**e1)),
+            Box::new(tr.transform(inh, &**e2)),
         )
     }
 
-    fn fold_mult<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+    fn fold_mult<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
         Expr::Mult(
-            Box::new(cata.transform(inh, &**e1)),
-            Box::new(cata.transform(inh, &**e2)),
+            Box::new(tr.transform(inh, &**e1)),
+            Box::new(tr.transform(inh, &**e2)),
         )
     }
 }
 
 struct IncMapper(Mapper);
 
-impl ExprTransformer for IncMapper {
-    type Inh = <Mapper as ExprTransformer>::Inh;
-    type Synth = <Mapper as ExprTransformer>::Synth;
+impl ExprTransformation for IncMapper {
+    type Inh = <Mapper as ExprTransformation>::Inh;
+    type Synth = <Mapper as ExprTransformation>::Synth;
 
-    fn fold_value<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, v: &i32) -> Self::Synth {
+    fn fold_value<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, v: &i32) -> Self::Synth {
         Expr::Value(*v + 1)
     }
 
-    fn fold_add<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
-//        Expr::Add(transform(self, inh, &**e1), transform(self, inh, &**e2))
-//        self.0
-        Mapper::fold_add(cata, inh, e1, e2)
+    fn fold_add<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        Mapper::fold_add(tr, inh, e1, e2)
     }
 
-    fn fold_mult<EC: ExprCata<Self::Inh, Self::Synth>>(cata: &EC, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
-        Mapper::fold_mult(cata, inh, e1, e2)
+    fn fold_mult<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth {
+        Mapper::fold_mult(tr, inh, e1, e2)
     }
 }
 
@@ -116,11 +111,12 @@ fn main() {
         ))
     );
 //    let v = transform(&Evaluator(()), (), &e);
-    let v = ExprCataImpl(Evaluator(())).transform((), &e);
+    let v = ExprTransformer
+        (Evaluator(())).transform((), &e);
     println!("result={}", v);
 
     // 3 * (8 + 2) = 30
-    let e_inc = ExprCataImpl(IncMapper(Mapper(()))).transform((), &e);
-    let v_inc = ExprCataImpl(Evaluator(())).transform((), &e_inc);
+    let e_inc = ExprTransformer(IncMapper(Mapper(()))).transform((), &e);
+    let v_inc = ExprTransformer(Evaluator(())).transform((), &e_inc);
     println!("result={}", v_inc);
 }
