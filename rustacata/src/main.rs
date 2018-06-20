@@ -1,22 +1,29 @@
+#![feature(proc_macro)]
+
+extern crate rustacata_macro;
+
+use rustacata_macro::derive_transformer;
+
+trait Transformer<T, I, S> {
+    fn transform(&self, inh: I, x: &T) -> S;
+}
+
 // Expression AST type
+#[derive_transformer]
 enum Expr {
     Value(i32),
     Add(Box<Expr>, Box<Expr>),
     Mult(Box<Expr>, Box<Expr>),
 }
 
-trait Transformer<T, I, S> {
-    fn transform(&self, inh: I, x: &T) -> S;
-}
-
-trait ExprTransformation {
-    type Inh;
-    type Synth;
-
-    fn fold_value<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, v: &i32) -> Self::Synth;
-    fn fold_add<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
-    fn fold_mult<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
-}
+//trait ExprTransformation {
+//    type Inh;
+//    type Synth;
+//
+//    fn fold_value<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, v: &i32) -> Self::Synth;
+//    fn fold_add<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
+//    fn fold_mult<Tr: Transformer<Expr, Self::Inh, Self::Synth>>(tr: &Tr, inh: Self::Inh, e1: &Box<Expr>, e2: &Box<Expr>) -> Self::Synth;
+//}
 
 struct ExprTransformer<'a, Tm: 'a> {
     tm: &'a Tm

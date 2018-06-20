@@ -1,0 +1,7 @@
+[package]
+name = "rustacata"
+version = "0.1.0"
+authors = ["Evgeniy Moiseenko <evg.moiseenko94@gmail.com>"]
+
+[dependencies]
+rustacata-macro = { path = "../rustacata-macro" }

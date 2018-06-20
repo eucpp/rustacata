@@ -1,0 +1,13 @@
+[package]
+name = "rustacata-macro"
+version = "0.1.0"
+authors = ["Evgeniy Moiseenko <evg.moiseenko94@gmail.com>"]
+
+[dependencies]
+proc-macro2 = { version = "0.4", features = ["nightly"] }
+syn = { version="0.14", features=["full"] }
+quote = "0.6"
+
+
+[lib]
+proc-macro = true
