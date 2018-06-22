@@ -24,29 +24,33 @@ struct ExprTransformer<'a, I, S> {
 
 impl<'a, I, S> ExprTransformer<'a, I, S> {
 
-    fn new(
-        fold_value : Box<'a + Fn(&Transformer<Expr, I, S>, I, &i32) -> S>,
-        fold_add : Box<'a + Fn(&Transformer<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S>,
-        fold_mult : Box<'a + Fn(&Transformer<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S>,
+    fn new<FValue, FAdd, FMult>(
+        fold_value: FValue,
+        fold_add: FAdd,
+        fold_mult: FMult,
     ) -> ExprTransformer<'a, I, S>
-//    where
-//        FValue: Fn(&Transformer<Expr, I, S>, I, &i32) -> S,
-//        FAdd: Fn(&Transformer<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S,
-//        FMult: Fn(&Transformer<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S,
+    where
+        FValue: 'a + Fn(&Transformer<Expr, I, S>, I, &i32) -> S,
+        FAdd: 'a + Fn(&Transformer<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S,
+        FMult: 'a + Fn(&Transformer<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S,
     {
         ExprTransformer {
-            fold_value,
-            fold_add,
-            fold_mult,
+            fold_value: Box::new(fold_value),
+            fold_add: Box::new(fold_add),
+            fold_mult: Box::new(fold_mult),
         }
+    }
+
+    fn set_fold_value<'b: 'a, FValue>(&mut self, fold_value: FValue)
+    where
+        FValue: 'b + Fn(&Transformer<Expr, I, S>, I, &i32) -> S,
+    {
+        self.fold_value = Box::new(fold_value);
     }
 }
 
 impl<'a, I, S> Transformer<Expr, I, S> for ExprTransformer<'a, I, S> {
     fn transform(&self, inh: I, x: &Expr) -> S {
-//        let fold_value = self.fold_value;
-//        let fold_add = self.fold_add;
-//        let fold_mult = self.fold_mult;
         match x {
             Expr::Value(ref v) => (self.fold_value)(&*self, inh, v),
             Expr::Add(ref e1, ref e2) => (self.fold_add)(&*self, inh, e1, e2),
@@ -60,19 +64,47 @@ struct Evaluator<'a>(ExprTransformer<'a, (), i32>);
 impl<'a> Evaluator<'a> {
     fn new() -> Evaluator<'a> {
         Evaluator(ExprTransformer::new(
-            Box::new(|tr: &Transformer<Expr, (), i32>, inh: (), v: &i32| {
+            |tr: &Transformer<Expr, (), i32>, inh: (), v: &i32| {
                 *v
-            }),
-            Box::new(|tr: &Transformer<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+            },
+            |tr: &Transformer<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
                 tr.transform(inh, &**e1) + tr.transform(inh, &**e2)
-            }),
-            Box::new(|tr: &Transformer<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+            },
+            |tr: &Transformer<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
                 tr.transform(inh, &**e1) * tr.transform(inh, &**e2)
-            })
+            }
         ))
     }
 
     fn eval(e: &Expr) -> i32 {
+        Self::new().0.transform((), e)
+    }
+}
+
+struct Mapper<'a>(ExprTransformer<'a, (), Expr>);
+
+impl<'a> Mapper<'a> {
+    fn new() -> Mapper<'a> {
+        Mapper(ExprTransformer::new(
+            |tr: &Transformer<Expr, (), Expr>, inh: (), v: &i32| {
+                Expr::Value(*v)
+            },
+            |tr: &Transformer<Expr, (), Expr>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+                Expr::Add(
+                    Box::new(tr.transform(inh, &**e1)),
+                    Box::new(tr.transform(inh, &**e2)),
+                )
+            },
+            |tr: &Transformer<Expr, (), Expr>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+                Expr::Mult(
+                    Box::new(tr.transform(inh, &**e1)),
+                    Box::new(tr.transform(inh, &**e2)),
+                )
+            }
+        ))
+    }
+
+    fn map(e: &Expr) -> Expr {
         Self::new().0.transform((), e)
     }
 }
@@ -142,7 +174,13 @@ fn main() {
 //    let v = ((), &e);
     println!("result={}", v);
 
-//    let inc_mapper = ExprTransformer{ tm: &IncMapper(Mapper(())) };
+    let mut inc_mapper = Mapper::new();
+    inc_mapper.0.set_fold_value(|tr: &Transformer<Expr, (), Expr>, inh: (), v: &i32| {
+        Expr::Value(*v + 1)
+    });
+    let e_inc = inc_mapper.0.transform((), &e);
+    let v_inc = Evaluator::eval(&e_inc);
+    println!("result={}", v_inc);
 
     // 3 * (8 + 2) = 30
 //    let e_inc = inc_mapper.transform((), &e);
