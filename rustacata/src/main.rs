@@ -26,42 +26,25 @@ struct ExprFold<'a, I, S> {
 
 impl<'a, I, S> ExprFold<'a, I, S> {
 
-    fn new<FValue, FAdd, FMult>(
-        fold_value: FValue,
-        fold_add: FAdd,
-        fold_mult: FMult,
-    ) -> ExprFold<'a, I, S>
-        where
-            FValue: 'a + Fn(&Foldable<Expr, I, S>, I, &i32) -> S,
-            FAdd: 'a + Fn(&Foldable<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S,
-            FMult: 'a + Fn(&Foldable<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S,
-    {
-        ExprFold {
-            fold_value: Box::new(fold_value),
-            fold_add: Box::new(fold_add),
-            fold_mult: Box::new(fold_mult),
-        }
-    }
-
-    fn set_fold_value<'b: 'a, F>(&mut self, f: F) -> &mut Self
+    fn with_fold_value<'b: 'a, F>(self, f: F) -> Self
     where
         F: 'b + Fn(&Foldable<Expr, I, S>, I, &i32) -> S
     {
-        self.fold_value = Box::new(f); self
+        ExprFold { fold_value: Box::new(f), ..self }
     }
 
-    fn set_fold_add<'b: 'a, F>(&mut self, f: F) -> &mut Self
+    fn with_fold_add<'b: 'a, F>(self, f: F) -> Self
     where
         F: 'b + Fn(&Foldable<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S
     {
-        self.fold_add = Box::new(f); self
+        ExprFold { fold_add: Box::new(f), ..self }
     }
 
-    fn set_fold_mult<'b: 'a, F>(&mut self, f: F) -> &mut Self
+    fn with_fold_mult<'b: 'a, F>(self, f: F) -> Self
         where
             F: 'b + Fn(&Foldable<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S
     {
-        self.fold_mult = Box::new(f); self
+        ExprFold { fold_mult: Box::new(f), ..self }
     }
 }
 
@@ -88,68 +71,70 @@ impl<'a, I, S> Foldable<Expr, I, S> for ExprFold<'a, I, S> {
 struct Evaluator<'a>(ExprFold<'a, (), i32>);
 
 impl<'a> Evaluator<'a> {
-    fn new() -> Evaluator<'a> {
-        let mut fold = ExprFold::default();
-        fold
-            .set_fold_value(|tr: &Foldable<Expr, (), i32>, inh: (), v: &i32| {
-                *v
-            })
-            .set_fold_add(|tr: &Foldable<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
-                tr.transform(inh, &**e1) + tr.transform(inh, &**e2)
-            })
-            .set_fold_mult(|tr: &Foldable<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
-                tr.transform(inh, &**e1) * tr.transform(inh, &**e2)
-            });
-        Evaluator(fold)
-    }
-
     fn eval(&self, e: &Expr) -> i32 {
         self.0.transform((), e)
     }
 }
 
+impl<'a> Default for Evaluator<'a> {
+    fn default() -> Self {
+        Evaluator(ExprFold::default()
+            .with_fold_value(|tr: &Foldable<Expr, (), i32>, inh: (), v: &i32| {
+                *v
+            })
+            .with_fold_add(|tr: &Foldable<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+                tr.transform(inh, &**e1) + tr.transform(inh, &**e2)
+            })
+            .with_fold_mult(|tr: &Foldable<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+                tr.transform(inh, &**e1) * tr.transform(inh, &**e2)
+            }))
+    }
+}
+
 struct Map<'a>(ExprFold<'a, (), Expr>);
 
-impl<'a> Map<'a> {
-    fn new() -> Self {
-        let mut fold = ExprFold::default();
-        fold.set_fold_value(|tr: &Foldable<Expr, (), Expr>, inh: (), v: &i32| {
-            Expr::Value(*v)
-        })
-            .set_fold_add(|tr: &Foldable<Expr, (), Expr>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+impl<'a> Default for Map<'a> {
+    fn default() -> Self {
+        Map(ExprFold::default()
+            .with_fold_value(|tr: &Foldable<Expr, (), Expr>, inh: (), v: &i32| {
+                Expr::Value(*v)
+            })
+            .with_fold_add(|tr: &Foldable<Expr, (), Expr>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
                 Expr::Add(
                     Box::new(tr.transform(inh, &**e1)),
                     Box::new(tr.transform(inh, &**e2)),
                 )
             })
-            .set_fold_mult(|tr: &Foldable<Expr, (), Expr>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+            .with_fold_mult(|tr: &Foldable<Expr, (), Expr>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
                 Expr::Mult(
                     Box::new(tr.transform(inh, &**e1)),
                     Box::new(tr.transform(inh, &**e2)),
                 )
-            });
-        Map(fold)
+            })
+        )
     }
+}
 
-    fn set_fold_value<'b: 'a, F>(&mut self, f: F) -> &mut Self
+impl<'a> Map<'a> {
+    fn with_map_value<'b: 'a, F>(self, f: F) -> Self
         where
             F: 'b + Fn(&Foldable<Expr, (), Expr>, (), &i32) -> Expr
     {
-        self.0.set_fold_value(f); self
+        Map(ExprFold { fold_value: Box::new(f), ..self.0 })
     }
 
-    fn set_fold_add<'b: 'a, F>(&mut self, f: F) -> &mut Self
+    fn with_map_add<'b: 'a, F>(self, f: F) -> Self
         where
             F: 'b + Fn(&Foldable<Expr, (), Expr>, (), &Box<Expr>, &Box<Expr>) -> Expr
     {
-        self.0.set_fold_add(f); self
+        Map(ExprFold { fold_add: Box::new(f), ..self.0 })
     }
 
-    fn set_fold_mult<'b: 'a, F>(&mut self, f: F) -> &mut Self
+    fn with_map_mult<'b: 'a, F>(self, f: F) -> Self
         where
             F: 'b + Fn(&Foldable<Expr, (), Expr>, (), &Box<Expr>, &Box<Expr>) -> Expr
     {
-        self.0.set_fold_mult(f); self
+        Map(ExprFold { fold_mult: Box::new(f), ..self.0 })
     }
 
     fn map(&self, e: &Expr) -> Expr {
@@ -167,15 +152,15 @@ fn main() {
         ))
     );
 
-    let evaluator = Evaluator::new();
+    let evaluator = Evaluator::default();
 
     let v = evaluator.eval(&e);
     println!("result={}", v);
 
-    let mut inc_mapper = Map::new();
-    inc_mapper.set_fold_value(|tr: &Foldable<Expr, (), Expr>, inh: (), v: &i32| {
-        Expr::Value(*v + 1)
-    });
+    let mut inc_mapper = Map::default().with_map_value(
+        |tr: &Foldable<Expr, (), Expr>, inh: (), v: &i32| {
+            Expr::Value(*v + 1)
+        });
     let e_inc = inc_mapper.map(&e);
     let v_inc = evaluator.eval(&e_inc);
     println!("result={}", v_inc);
