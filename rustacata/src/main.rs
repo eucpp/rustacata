@@ -79,13 +79,13 @@ impl<'a> Evaluator<'a> {
 impl<'a> Default for Evaluator<'a> {
     fn default() -> Self {
         Evaluator(ExprFold::default()
-            .with_fold_value(|tr: &Foldable<Expr, (), i32>, inh: (), v: &i32| {
+            .with_fold_value(|tr, inh, v| {
                 *v
             })
-            .with_fold_add(|tr: &Foldable<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+            .with_fold_add(|tr, inh, e1, e2| {
                 tr.transform(inh, &**e1) + tr.transform(inh, &**e2)
             })
-            .with_fold_mult(|tr: &Foldable<Expr, (), i32>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+            .with_fold_mult(|tr, inh, e1, e2| {
                 tr.transform(inh, &**e1) * tr.transform(inh, &**e2)
             }))
     }
@@ -96,16 +96,16 @@ struct Map<'a>(ExprFold<'a, (), Expr>);
 impl<'a> Default for Map<'a> {
     fn default() -> Self {
         Map(ExprFold::default()
-            .with_fold_value(|tr: &Foldable<Expr, (), Expr>, inh: (), v: &i32| {
+            .with_fold_value(|tr, inh, v| {
                 Expr::Value(*v)
             })
-            .with_fold_add(|tr: &Foldable<Expr, (), Expr>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+            .with_fold_add(|tr, inh: (), e1, e2| {
                 Expr::Add(
                     Box::new(tr.transform(inh, &**e1)),
                     Box::new(tr.transform(inh, &**e2)),
                 )
             })
-            .with_fold_mult(|tr: &Foldable<Expr, (), Expr>, inh: (), e1: &Box<Expr>, e2: &Box<Expr>| {
+            .with_fold_mult(|tr, inh, e1, e2| {
                 Expr::Mult(
                     Box::new(tr.transform(inh, &**e1)),
                     Box::new(tr.transform(inh, &**e2)),
@@ -168,8 +168,8 @@ fn main() {
     let v = evaluator.eval(&e);
     println!("result={}", v);
 
-    let mut inc_mapper = Map::default().with_map_value(
-        |tr: &Foldable<Expr, (), Expr>, inh: (), v: &i32| {
+    let inc_mapper = Map::default().with_map_value(
+        |tr, inh, v| {
             Expr::Value(*v + 1)
         });
     let e_inc = inc_mapper.map(&e);
