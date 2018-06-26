@@ -142,6 +142,17 @@ impl<'a> Map<'a> {
     }
 }
 
+//struct ContraMapT<'a, T, U, I, S> {
+//    tr: Box<'a + Foldable<U, I, S>>,
+//    f: Box<'a + Fn(T) -> U>,
+//}
+//
+//impl<'a, T, U, I, S> Foldable<T, I, S> for ContraMapT<'a, T, U, I, S> {
+//    fn transform(&self, inh: I, x: &T) -> S {
+//        self.tr.transform(inh, &(self.f)(*x))
+//    }
+//}
+
 fn main() {
     // 2 * (7 + 1) = 16
     let e = Expr::Mult(
