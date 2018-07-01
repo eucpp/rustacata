@@ -8,6 +8,12 @@ trait Transformer<T, I, S> {
     fn transform(&self, inh: I, x: T) -> S;
 }
 
+trait Mappable<I> : Sized {
+    type Tr: for<'a> Transformer<&'a Self, I, Self>;
+
+    fn transformer() -> Self::Tr;
+}
+
 // Expression AST type
 //#[derive_transformer]
 enum Expr {
@@ -46,7 +52,7 @@ impl<'a, I, S> ExprFold<'a, I, S> {
     }
 }
 
-impl<'a, I, S> Default for ExprFold<'a, I, S> {
+impl<I, S> Default for ExprFold<'static, I, S> {
     fn default() -> Self {
         ExprFold {
             fold_value: Box::new(|tr, inh, v| unimplemented!()),
@@ -96,7 +102,7 @@ impl<'a, I, S> ExprFoldMut<'a, I, S> {
     }
 }
 
-impl<'a, I, S> Default for ExprFoldMut<'a, I, S> {
+impl<I, S> Default for ExprFoldMut<'static, I, S> {
     fn default() -> Self {
         ExprFoldMut {
             fold_value: Box::new(|tr, inh, v| unimplemented!()),
@@ -124,7 +130,7 @@ impl<'a> Evaluator<'a> {
     }
 }
 
-impl<'a> Default for Evaluator<'a> {
+impl Default for Evaluator<'static> {
     fn default() -> Self {
         Evaluator(ExprFold::default()
             .with_fold_value(|tr, inh, v| {
@@ -139,11 +145,11 @@ impl<'a> Default for Evaluator<'a> {
     }
 }
 
-struct Map<'a, I>(ExprFold<'a, I, Expr>);
+struct ExprMap<'a, I>(ExprFold<'a, I, Expr>);
 
-impl<'a, I: Copy> Default for Map<'a, I> {
+impl<I: Copy> Default for ExprMap<'static, I> {
     fn default() -> Self {
-        Map(ExprFold::default()
+        ExprMap(ExprFold::default()
             .with_fold_value(|tr, inh, v| {
                 Expr::Value(*v)
             })
@@ -163,36 +169,46 @@ impl<'a, I: Copy> Default for Map<'a, I> {
     }
 }
 
-impl<'a, I> Map<'a, I> {
+impl<'a, I> ExprMap<'a, I> {
     fn with_map_value<'c: 'a, F>(self, f: F) -> Self
         where
             F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, Expr>, I, &'b i32) -> Expr
     {
-        Map(ExprFold { fold_value: Box::new(f), ..self.0 })
+        ExprMap(ExprFold { fold_value: Box::new(f), ..self.0 })
     }
 
     fn with_map_add<'c: 'a, F>(self, f: F) -> Self
         where
             F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, Expr>, I, &'b Box<Expr>, &'b Box<Expr>) -> Expr
     {
-        Map(ExprFold { fold_add: Box::new(f), ..self.0 })
+        ExprMap(ExprFold { fold_add: Box::new(f), ..self.0 })
     }
 
     fn with_map_mult<'c: 'a, F>(self, f: F) -> Self
         where
             F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, Expr>, I, &'b Box<Expr>, &'b Box<Expr>) -> Expr
     {
-        Map(ExprFold { fold_mult: Box::new(f), ..self.0 })
+        ExprMap(ExprFold { fold_mult: Box::new(f), ..self.0 })
     }
+}
 
-    fn map(&self, inh: I, e: &Expr) -> Expr {
-        self.0.transform(inh, e)
+impl<'a, 'b, I> Transformer<&'b Expr, I, Expr> for ExprMap<'a, I> {
+    fn transform(&self, inh: I, x: &'b Expr) -> Expr {
+        self.0.transform(inh, x)
+    }
+}
+
+impl<I: Copy> Mappable<I> for Expr {
+    type Tr = ExprMap<'static, I>;
+
+    fn transformer() -> Self::Tr {
+        ExprMap::default()
     }
 }
 
 struct IterMut<'a, I>(ExprFoldMut<'a, I, ()>);
 
-impl<'a, I: Copy> Default for IterMut<'a, I> {
+impl<I: Copy> Default for IterMut<'static, I> {
     fn default() -> Self {
         IterMut(ExprFoldMut::default()
             .with_fold_value(|tr, inh, v| {
@@ -252,11 +268,13 @@ fn main() {
     let v = evaluator.eval(&e);
     println!("result={}", v);
 
-    let inc_mapper = Map::default().with_map_value(
-        |tr, inh, v| {
-            Expr::Value(*v + 1)
-        });
-    let e_inc = inc_mapper.map((), &e);
+//    let inc_mapper = ExprMap::default()
+    let inc_mapper = <Expr as Mappable<()>>::transformer()
+        .with_map_value(
+            |tr, inh, v| {
+                Expr::Value(*v + 1)
+            });
+    let e_inc = inc_mapper.transform((), &e);
     let v_inc = evaluator.eval(&e_inc);
     println!("result={}", v_inc);
 
