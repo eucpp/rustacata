@@ -4,10 +4,8 @@
 
 //use rustacata_macro::derive_transformer;
 
-trait Foldable<T, I, S> {
-    fn transform(&self, inh: I, x: &T) -> S;
-
-//    fn map<F: Fn(U) -> T>(Self, f: F) -> impl Transformer<U, I, S>;
+trait Transformer<T, I, S> {
+    fn transform(&self, inh: I, x: T) -> S;
 }
 
 // Expression AST type
@@ -19,30 +17,30 @@ enum Expr {
 }
 
 struct ExprFold<'a, I, S> {
-    fold_value : Box<'a + Fn(&Foldable<Expr, I, S>, I, &i32) -> S>,
-    fold_add : Box<'a + Fn(&Foldable<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S>,
-    fold_mult : Box<'a + Fn(&Foldable<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S>,
+    fold_value : Box<'a + for<'b> Fn(&Transformer<&'b Expr, I, S>, I, &'b i32) -> S>,
+    fold_add : Box<'a + for <'b> Fn(&Transformer<&'b Expr, I, S>, I, &'b Box<Expr>, &'b Box<Expr>) -> S>,
+    fold_mult : Box<'a + for<'b> Fn(&Transformer<&'b Expr, I, S>, I, &'b Box<Expr>, &'b Box<Expr>) -> S>,
 }
 
 impl<'a, I, S> ExprFold<'a, I, S> {
 
-    fn with_fold_value<'b: 'a, F>(self, f: F) -> Self
+    fn with_fold_value<'c: 'a, F>(self, f: F) -> Self
     where
-        F: 'b + Fn(&Foldable<Expr, I, S>, I, &i32) -> S
+        F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, S>, I, &'b i32) -> S
     {
         ExprFold { fold_value: Box::new(f), ..self }
     }
 
-    fn with_fold_add<'b: 'a, F>(self, f: F) -> Self
+    fn with_fold_add<'c: 'a, F>(self, f: F) -> Self
     where
-        F: 'b + Fn(&Foldable<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S
+        F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, S>, I, &'b Box<Expr>, &'b Box<Expr>) -> S
     {
         ExprFold { fold_add: Box::new(f), ..self }
     }
 
-    fn with_fold_mult<'b: 'a, F>(self, f: F) -> Self
+    fn with_fold_mult<'c: 'a, F>(self, f: F) -> Self
         where
-            F: 'b + Fn(&Foldable<Expr, I, S>, I, &Box<Expr>, &Box<Expr>) -> S
+            F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, S>, I, &'b Box<Expr>, &'b Box<Expr>) -> S
     {
         ExprFold { fold_mult: Box::new(f), ..self }
     }
@@ -58,8 +56,8 @@ impl<'a, I, S> Default for ExprFold<'a, I, S> {
     }
 }
 
-impl<'a, I, S> Foldable<Expr, I, S> for ExprFold<'a, I, S> {
-    fn transform(&self, inh: I, x: &Expr) -> S {
+impl<'a, 'b, I, S> Transformer<&'b Expr, I, S> for ExprFold<'a, I, S> {
+    fn transform(&self, inh: I, x: &'b Expr) -> S {
         match x {
             Expr::Value(ref v) => (self.fold_value)(&*self, inh, v),
             Expr::Add(ref e1, ref e2) => (self.fold_add)(&*self, inh, e1, e2),
@@ -71,7 +69,7 @@ impl<'a, I, S> Foldable<Expr, I, S> for ExprFold<'a, I, S> {
 struct Evaluator<'a>(ExprFold<'a, (), i32>);
 
 impl<'a> Evaluator<'a> {
-    fn eval(&self, e: &Expr) -> i32 {
+    fn eval<'b>(&self, e: &'b Expr) -> i32 {
         self.0.transform((), e)
     }
 }
@@ -91,15 +89,15 @@ impl<'a> Default for Evaluator<'a> {
     }
 }
 
-struct Map<'a>(ExprFold<'a, (), Expr>);
+struct Map<'a, I>(ExprFold<'a, I, Expr>);
 
-impl<'a> Default for Map<'a> {
+impl<'a, I: Copy> Default for Map<'a, I> {
     fn default() -> Self {
         Map(ExprFold::default()
             .with_fold_value(|tr, inh, v| {
                 Expr::Value(*v)
             })
-            .with_fold_add(|tr, inh: (), e1, e2| {
+            .with_fold_add(|tr, inh, e1, e2| {
                 Expr::Add(
                     Box::new(tr.transform(inh, &**e1)),
                     Box::new(tr.transform(inh, &**e2)),
@@ -115,46 +113,35 @@ impl<'a> Default for Map<'a> {
     }
 }
 
-impl<'a> Map<'a> {
-    fn with_map_value<'b: 'a, F>(self, f: F) -> Self
+impl<'a, I> Map<'a, I> {
+    fn with_map_value<'c: 'a, F>(self, f: F) -> Self
         where
-            F: 'b + Fn(&Foldable<Expr, (), Expr>, (), &i32) -> Expr
+            F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, Expr>, I, &'b i32) -> Expr
     {
         Map(ExprFold { fold_value: Box::new(f), ..self.0 })
     }
 
-    fn with_map_add<'b: 'a, F>(self, f: F) -> Self
+    fn with_map_add<'c: 'a, F>(self, f: F) -> Self
         where
-            F: 'b + Fn(&Foldable<Expr, (), Expr>, (), &Box<Expr>, &Box<Expr>) -> Expr
+            F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, Expr>, I, &'b Box<Expr>, &'b Box<Expr>) -> Expr
     {
         Map(ExprFold { fold_add: Box::new(f), ..self.0 })
     }
 
-    fn with_map_mult<'b: 'a, F>(self, f: F) -> Self
+    fn with_map_mult<'c: 'a, F>(self, f: F) -> Self
         where
-            F: 'b + Fn(&Foldable<Expr, (), Expr>, (), &Box<Expr>, &Box<Expr>) -> Expr
+            F: 'c + for<'b> Fn(&Transformer<&'b Expr, I, Expr>, I, &'b Box<Expr>, &'b Box<Expr>) -> Expr
     {
         Map(ExprFold { fold_mult: Box::new(f), ..self.0 })
     }
 
-    fn map(&self, e: &Expr) -> Expr {
-        self.0.transform((), e)
+    fn map(&self, inh: I, e: &Expr) -> Expr {
+        self.0.transform(inh, e)
     }
 }
 
-//struct ContraMapT<'a, T, U, I, S> {
-//    tr: Box<'a + Foldable<U, I, S>>,
-//    f: Box<'a + Fn(T) -> U>,
-//}
-//
-//impl<'a, T, U, I, S> Foldable<T, I, S> for ContraMapT<'a, T, U, I, S> {
-//    fn transform(&self, inh: I, x: &T) -> S {
-//        self.tr.transform(inh, &(self.f)(*x))
-//    }
-//}
-
 fn main() {
-    // 2 * (7 + 1) = 16
+//    // 2 * (7 + 1) = 16
     let e = Expr::Mult(
         Box::new(Expr::Value(2)),
         Box::new(Expr::Add(
@@ -172,7 +159,7 @@ fn main() {
         |tr, inh, v| {
             Expr::Value(*v + 1)
         });
-    let e_inc = inc_mapper.map(&e);
+    let e_inc = inc_mapper.map((), &e);
     let v_inc = evaluator.eval(&e_inc);
     println!("result={}", v_inc);
 }
