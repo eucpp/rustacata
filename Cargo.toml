@@ -3,4 +3,6 @@
 members = [
   "rustacata",
   "rustacata-macro",
+  "examples/option",
+  "examples/eval"
 ]

@@ -1,0 +1,4 @@
+[package]
+name = "rustacata-example-eval"
+version = "0.1.0"
+authors = ["Evgeniy Moiseenko <evg.moiseenko94@gmail.com>"]
