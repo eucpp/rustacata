@@ -1,3 +1,5 @@
 *.lock
 
 target/*
+
+cmake-build-debug/* 

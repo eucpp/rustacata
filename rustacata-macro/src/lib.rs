@@ -10,56 +10,23 @@ extern crate syn;
 extern crate quote;
 
 use syn::{Item, ItemEnum, Variant, Ident};
-use proc_macro::TokenStream;
-use proc_macro2::Span;
+use proc_macro2::{Span, TokenStream};
+
+mod input;
+mod algebra;
 
 #[proc_macro_attribute]
-pub fn derive_transformer(args: TokenStream, input: TokenStream) -> TokenStream {
-    let input : Item = syn::parse(input).unwrap();
+pub fn cata(args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let args = input::Args::parse(args);
+    let data = input::Data::parse(input);
 
-    match input {
-        Item::Enum(ref enum_item) => {
-            let transformation = Ident::new(
-                &format!("{}Transformation", enum_item.ident),
-                Span::call_site()
-            );
-            let methods = enum_item.variants.iter()
-                .map(|variant| derive_variant_method(enum_item, variant));
+    let alg = algebra::generate(&args, &data);
 
-            let expanded = quote! {
-                #input
+    let expanded = quote! {
+        #data
 
-                trait #transformation {
-                    type Inh;
-                    type Synth;
+        #alg
+    };
 
-                    #(#methods;)*
-                }
-            };
-
-            expanded.into()
-        },
-        _ => unimplemented!()
-    }
-}
-
-fn derive_variant_method(enum_item: &ItemEnum, variant: &Variant) -> proc_macro2::TokenStream {
-    let enum_name = Ident::new(&format!("{}", enum_item.ident), Span::call_site());
-    let meth_name = Ident::new(&format!("fold_{}", variant.ident).to_lowercase(), Span::call_site());
-
-    let mut cnt = 0;
-    let args = variant.fields.iter().map(|field| {
-        let name = Ident::new(&format!("x{}", cnt), Span::call_site());
-        let ty = &field.ty;
-        cnt = cnt + 1;
-        quote! { #name : & #ty }
-    });
-
-    quote! {
-        fn #meth_name <Tr: Transformer<#enum_name, Self::Inh, Self::Synth> >(
-            tr: &Tr,
-            inh: Self::Inh,
-            #(#args),*
-        ) -> Self::Synth
-    }
+    expanded.into()
 }

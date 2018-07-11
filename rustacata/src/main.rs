@@ -8,11 +8,68 @@ trait Transformer<T, I, S> {
     fn transform(&self, inh: I, x: T) -> S;
 }
 
+trait Foldable<I, S> : Sized {
+    type Tr: for<'a> Transformer<&'a Self, I, S>;
+
+    fn transformer() -> Self::Tr;
+}
+
+trait Foldable1<T, TS, I, S> : Sized {
+    type Tr: for<'a> Transformer<&'a Self, I, S>;
+
+    fn transformer(tr: & for<'a> Transformer<&'a T, I, TS>) -> Self::Tr;
+}
+
 trait Mappable<I> : Sized {
     type Tr: for<'a> Transformer<&'a Self, I, Self>;
 
     fn transformer() -> Self::Tr;
 }
+
+struct OptionFold<'a, T, TS, I, S> {
+    fold_t : Box<'a + for<'b> Transformer<&'b T, I, TS>>,
+    fold_some : Box<'a + for<'b> Fn(&Transformer<&'b Option<T>, I, S>, &Transformer<&'b T, I, TS>, I, &'b T) -> S>,
+    fold_none : Box<'a + for<'b> Fn(&Transformer<&'b Option<T>, I, S>, &Transformer<&'b T, I, TS>, I) -> S>,
+}
+
+impl<'a, T, TS, I, S> OptionFold<'a, T, TS, I, S> {
+
+    fn with_fold_some<'c: 'a, F>(self, f: F) -> Self
+    where
+        F: 'c + for<'b> Fn(&Transformer<&'b Option<T>, I, S>, &Transformer<&'b T, I, S>, I, &'b T) -> S
+    {
+        OptionFold { fold_some: Box::new(f), ..self }
+    }
+
+    fn with_fold_none<'c: 'a, F>(self, f: F) -> Self
+    where
+        F: 'c + for<'b> Fn(&Transformer<&'b Option<T>, I, S>, &Transformer<&'b T, I, S>, I) -> S
+{
+    OptionFold { fold_none: Box::new(f), ..self }
+}
+}
+
+impl<'a, 'b, T, I, S> Transformer<&'b Option<T>, I, S> for OptionFold<'a, T, I, S> {
+    fn transform(&self, inh: I, x: &'b Option<T>) -> S {
+        match x {
+            Some(ref t) => (self.fold_some)(&*self, inh, t),
+            None => (self.fold_none)(&*self, inh),
+        }
+    }
+}
+
+impl<T, TS, I, S> Foldable1<T, TS, I, S> for Option<T> {
+    type Tr = OptionFold<'static, T, TS, I, S>;
+
+    fn transformer() -> Self::Tr {
+        OptionFold {
+            fold_some: Box::new(|tr, inh, v| unimplemented!()),
+            fold_none: Box::new(|tr, inh, v| unimplemented!()),
+        }
+    }
+}
+
+//Option<T>
 
 // Expression AST type
 //#[derive_transformer]
@@ -20,6 +77,7 @@ enum Expr {
     Value(i32),
     Add(Box<Expr>, Box<Expr>),
     Mult(Box<Expr>, Box<Expr>),
+    Test(Option<T>)
 }
 
 struct ExprFold<'a, I, S> {
