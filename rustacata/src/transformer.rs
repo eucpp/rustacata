@@ -1,4 +1,8 @@
 
-trait Transformer<T, R, Env> {
-    fn transform(&self, env: Env, x: T) -> R;
+trait Transformer<A, B> : Sized {
+    fn transform(&self, a: A) -> B;
+
+    fn compose<C, Tr>(Self, tr: Tr) -> impl Transformer<A, C>
+    where
+        Tr: Transformer<B, C>;
 }

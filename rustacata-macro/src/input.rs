@@ -15,25 +15,25 @@ impl Args {
     }
 }
 
-pub enum Data {
+pub enum Datatype {
     Struct(syn::ItemStruct),
     Enum(syn::ItemEnum),
 }
 
-impl Data {
-    pub fn parse(input: proc_macro::TokenStream) -> Data {
+impl Datatype {
+    pub fn parse(input: proc_macro::TokenStream) -> Datatype {
         let input : Item = syn::parse(input).unwrap();
         match input {
-            Item::Enum(item) => Data::Enum(item),
+            Item::Enum(item) => Datatype::Enum(item),
             _ => unimplemented!(),
         }
     }
 }
 
-impl ToTokens for Data {
+impl ToTokens for Datatype {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         match self {
-            Data::Enum(ref item) => item.to_tokens(tokens),
+            Datatype::Enum(ref item) => item.to_tokens(tokens),
             _ => unimplemented!(),
         }
     }

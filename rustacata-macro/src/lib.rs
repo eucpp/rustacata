@@ -13,14 +13,14 @@ use syn::{Item, ItemEnum, Variant, Ident};
 use proc_macro2::{Span, TokenStream};
 
 mod input;
-mod algebra;
+mod ftable;
 
 #[proc_macro_attribute]
 pub fn cata(args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let args = input::Args::parse(args);
-    let data = input::Data::parse(input);
+    let data = input::Datatype::parse(input);
 
-    let alg = algebra::generate(&args, &data);
+    let alg = ftable::generate(&args, &data);
 
     let expanded = quote! {
         #data
