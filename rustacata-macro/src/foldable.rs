@@ -8,12 +8,16 @@ use algebra::{Env, Algebra};
 struct Foldable;
 
 impl Algebra for Foldable {
-    fn trait_name() -> Ident {
+    fn trait_name(_env: &Env, _dt: &Datatype) -> Ident {
         Ident::new("Foldable", Span::call_site())
     }
 
     fn struct_name(_env: &Env, dt: &Datatype) -> Ident {
         Ident::new(&format!("{}Fold", *ident), Span::call_site())
+    }
+
+    fn result_type(env: &Env, dt: &Datatype) -> Type {
+        env.default_result_ty()
     }
 
     fn generics(env: &Env, dt: &Datatype) -> Punctuated<GenericParam, Comma> {
@@ -25,15 +29,15 @@ impl Algebra for Foldable {
         Punctuated::new()
     }
 
-    fn variant_field_name(_env: &Env, variant: &Variant) -> Ident {
-        Ident::new(&format!("fold_{}", variant.ident).to_lowercase(), Span::call_site())
+    fn field_name(_env: &Env, ident: &Ident) -> Ident {
+        Ident::new(&format!("fold_{}", ident).to_lowercase(), Span::call_site())
     }
 
-    fn variant_setter_name(_env: &Env, variant: &Variant) -> Ident {
-        Ident::new(&format!("with_fold_{}", variant.ident).to_lowercase(), Span::call_site())
+    fn setter_name(_env: &Env, ident: &Ident) -> Ident {
+        Ident::new(&format!("with_fold_{}", ident).to_lowercase(), Span::call_site())
     }
 
-    fn variant_field_default(_env: &Env, variant: &Variant) -> Expr {
-        quote! { unimplemented!() }
+    fn initializer_body(_env: &Env, ident: &Ident, _args: &Vec<FnArg>) -> Expr {
+        parse( quote! { unimplemented!() }).unwrap()
     }
 }

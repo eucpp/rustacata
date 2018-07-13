@@ -2,7 +2,7 @@ use std::iter::{IntoIterator};
 
 use proc_macro2::{Span, TokenStream};
 
-use syn::{parse, Ident, Expr, Variant, Type, GenericParam, WherePredicate};
+use syn::{parse, Ident, Expr, FnArg, Fields, Field, Variant, Type, GenericParam, WherePredicate};
 use syn::token::{Comma};
 use syn::punctuated::{Punctuated};
 
@@ -13,81 +13,89 @@ struct Env {
 }
 
 impl Env {
-    fn default_result_ty(&self) -> Type {
-        r_ty = Ident::new("R", Span::call_site());
-        parse(quote! { #r_ty })
+    pub fn datatype_ty(&self, dt: &Datatype) -> Type {
+        let dt_ty = dt.ty();
+        parse_quote! { &'b #self_ty }
+    }
+
+    pub fn argument_ty(&self, field: &Field) -> Type {
+        let arg_ty = field.ty();
+        parse_quote! { &'b #arg_ty }
+    }
+
+    pub fn default_result_ty(&self) -> Type {
+        parse_quote! { B }
+    }
+
+    pub fn generics(&self, dt: &Datatype) -> Punctuated<GenericParam, Comma> {
+        parse_quote! { 'b }
+    }
+
+    pub fn generics_bounds(&self, dt: &Datatype) -> Punctuated<WherePredicate, Comma> {
+        Punctuated::new()
     }
 }
 
 pub trait Algebra {
 
-    fn trait_name() -> Ident;
+    fn trait_name(env: &Env, dt: &Datatype) -> Ident;
 
     fn struct_name(env: &Env, dt: &Datatype) -> Ident;
 
-    fn result_type(env: &Env, dt: &Datatype) -> Type {
-        env.default_result_ty()
-    }
+    fn result_type(env: &Env, dt: &Datatype) -> Type;
 
-    fn generics(dt: &Datatype) -> Punctuated<GenericParam, Comma>;
+    fn generics(env: &Env, dt: &Datatype) -> Punctuated<GenericParam, Comma>;
 
-    fn generics_bounds(dt: &Datatype) -> Punctuated<WherePredicate, Comma>;
+    fn generics_bounds(env: &Env, dt: &Datatype) -> Punctuated<WherePredicate, Comma>;
 
-    fn variant_field_name(variant: &Variant) -> Ident;
+    fn field_name(env: &Env, ident: &Ident) -> Ident;
 
-    fn variant_setter_name(variant: &Variant) -> Ident;
+    fn setter_name(env: &Env, ident: &Ident) -> Ident;
 
-    fn variant_field_default(variant: &Variant) -> Expr;
+    fn initializer_body(env: &Env, ident: &Ident, args: &Vec<FnArg>) -> Expr;
 }
 
-fn generate<A: Algebra>(args: &Args, dt: &Datatype, alg: &A) -> TokenStream {
-    let self_ty = dt.ty();
+fn generate<Alg: Algebra>(env: &Env, dt: &Datatype) -> TokenStream {
+    let self_ty = env.datatype_ty(dt);
 
-    let alg_name = alg.name(dt);
+    let alg_trait_name = Alg::trait_name(env, dt);
+    let alg_struct_name = Alg::struct_name(env, dt);
 
-    let alg_result_ty = alg.result_ty(dt);
-    let alg_trait_name = alg.trait_name();
+    let alg_result_ty = Alg::result_type(env, dt);
 
-    let alg_generics = alg.generics(dt);
-    let alg_generics_bounds = alg.generics_bounds(dt);
+    let alg_generics = Alg::generics(env, dt);
+    let alg_generics_bounds = Alg::generics_bounds(env, dt);
 
-    let alg_setters = match dt {
-        Data::Enum(item) => item.variants.iter().map(|variant| {
-            gen_variant_setter(dt, &variant, alg)
-        }),
-    };
+    let all_generics = env.generics(dt).extend(alg_generics);
+    let all_generics_bounds = env.generics_bounds(dt).extend(alg_generics_bounds);
 
-    let alg_inits = match dt {
-        Data::Enum(item) => item.variants.iter().map(|variant| {
-            gen_variant_init(dt, &variant, alg)
-        }),
-    };
+    let alg_fields = apply_to_variants(env, dt, field::<Alg>);
+    let alg_setters = apply_to_variants(env, dt, setter::<Alg>);
+    let alg_inits = apply_to_variants(env, dt, initializer::<Alg>);
 
     quote! {
-//        struct #alg_name<'a, #alg_generics>(#alg_tbl<'a, #alg_result_ty>);
-
-        struct #alg_name<'a, #alg_generics> {
-            #(#fields),*
+        struct #alg_struct<'a, #generics> {
+            #(#alg_fields),*
         }
 
-        impl #alg_name<'a, #alg_generics> {
+        impl #alg_struct<'a, #alg_generics> {
             #(#alg_setters),*
         }
 
-        impl<'a, 'b, #alg_generics> Transformer<&'b #self_ty, #alg_result_ty>
-        for #alg_name<'a, #alg_generics>
-        where #alg_generics_bounds {
+        impl<'a, #all_generics> Transformer<#self_ty, #alg_result_ty>
+        for #alg_struct<'a, #alg_generics>
+        where #all_generics_bounds {
 
-            fn transform(&self, x: &'b #self_ty) -> #alg_result_ty {
+            fn transform(&self, x: #self_ty) -> #alg_result_ty {
                 self.0.transform(x)
             }
         }
 
-        impl <#alg_generics_bounds> #alg_trait_name<#alg_generics> for #self_ty {
-            type Tr = #alg_name<'static, #alg_generics>;
+        impl <#alg_generics_bounds> #alg_trait<#alg_generics> for #self_ty {
+            type Tr = #alg_struct<'static, #alg_generics>;
 
             fn transformer() -> Self::Tr {
-                #alg_name {
+                #alg_struct {
                     #(#alg_inits),*
                 }
             }
@@ -95,54 +103,81 @@ fn generate<A: Algebra>(args: &Args, dt: &Datatype, alg: &A) -> TokenStream {
     }
 }
 
-fn gen_variant_setter<A: Algebra>(dt: &Datatype, variant: &Variant, alg: &A) -> TokenStream {
-    let alg_name = alg.name(dt.ident());
-    let field_name = alg.variant_field_name(&variant.ident);
-    let setter_name = alg.variant_setter_name(&variant.ident);
+fn apply_to_variants<F, R>(env: Env, dt: Datatype, f: F) -> Iter<Item = R>
+    where
+        F: Fn(&Env, &Datatype, &Ident, &Fields) -> R
+{
+    match dt {
+        Data::Enum(item) => item.variants.iter().map(|variant| {
+            f(env, dt, &variant.ident, &variant.fields)
+        }),
+        _ => unimplemented!()
+    }
+}
 
-    let fn_ty = variant_fn_type(dt, variant);
+fn field_fn_ty<Alg: Algebra>(env: &Env, dt: &Datatype, fields: &Fields) -> Type {
+    let dt_ty = env.datatype_ty(dt);
+    let r_ty = Alg::result_type(env, dt);
+
+    let dt_tr = quote! { Transformer<#dt_ty, #r_ty> };
+    let args = fields.iter().map(|field| env.argument_ty(field));
 
     quote! {
+        for<'b> Fn(#dt_tr, #(#args),*) -> #r_ty
+    }
+}
+
+fn field<Alg: Algebra>(env: &Env, dt: Datatype, ident: Ident, fields: &Fields) -> Field {
+    let field_name = Alg::field_name(env, ident);
+    let field_fn_ty = field_fn_ty(env, dt, fields);
+
+    quote! {
+        #field_name : Box<'a + #field_fn_ty>
+    }
+}
+
+fn setter<Alg: Algebra>(env: &Env, dt: &Datatype, ident: &Ident, fields: &Fields) -> ItemFn {
+    let struct_name = Alg::struct_name(env, dt.ident());
+    let field_name = Alg::field_name(env, ident);
+    let setter_name = Alg::setter_name(env, ident);
+
+    let field_fn_ty = field_fn_ty::<Alg>(env, dt, fields);
+
+    parse_quote! {
         fn #setter_name <'c: 'a, F>(self, f: F) -> Self
         where
-            F: 'c + #fn_ty
+            F: 'c + #field_fn_ty
         {
-            #alg_name { #field_name: Box::new(f), ..self }
+            #struct_name { #field_name: Box::new(f), ..self }
         }
     }
 }
 
-fn gen_variant_init<A: Algebra>(dt: &Datatype, variant: &Variant, alg: &A) -> TokenStream {
-    let field_name = alg.variant_field_name(variant);
-    let body = alg.variant_field_default(variant);
+fn initializer<Alg: Algebra>(env: &Env, dt: &Datatype, ident: &Ident, fields: &Fields) -> FieldValue {
+    let args = initializer_arguments(env, dt, fields);
 
+    let field = Alg::field_name(env, ident);
+    let body = Alg::initializer_body(env, ident, Vec::from_iter(args));
+
+    parse_quote! {
+        #field: Box::new(|tr, #(#args),*| #body)
+    }
+}
+
+fn initializer_arguments(env: &Env, dt: &Datatype, fields: &Fields) -> Iter<Item = FnArg> {
     let mut cnt = 0;
-    let args = variant.fields.iter().map(|field| {
-        let arg_name = Ident::new(&format!("x{}", cnt), Span::call_site());
-        let arg_ty = field.ty;
 
+    let gen = || {
         cnt = cnt + 1;
+        Ident::new(&format!("x{}", cnt - 1), Span::call_site())
+    };
 
-        quote! {
-            #arg_name: &'b #arg_ty
+    fields.iter().map(|field| {
+        let arg = if let Some(ident) = field.ident { ident } else { gen() };
+        let ty = env.argument_ty(field);
+
+        parse_quote! {
+            #arg: #ty
         }
-    });
-
-    quote! {
-        #field_name: Box::new(|tr, #(#args),*| #body)
-    }
-}
-
-fn variant_fn_type(dt: &Datatype, variant: &Variant) -> TokenStream {
-    let dt_ty = dt.ty();
-    let dt_tr = quote! { Transformer<& 'b #dt_ty, R, Env> };
-
-    let args = variant.fields.iter().map(|field| {
-        let field_ty = &field.ty;
-        quote! { & 'b #field_ty }
-    });
-
-    quote! {
-        for<'b> Fn(#dt_tr, Env, #(#args),*) -> R
-    }
+    })
 }
