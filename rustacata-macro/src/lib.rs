@@ -1,5 +1,7 @@
 #![feature(proc_macro)]
 
+#![recursion_limit = "128"]
+
 extern crate proc_macro;
 extern crate proc_macro2;
 
@@ -13,18 +15,23 @@ use syn::{Item, ItemEnum, Variant, Ident};
 use proc_macro2::{Span, TokenStream};
 
 mod input;
+mod algebra;
+mod foldable;
 
 #[proc_macro_attribute]
 pub fn cata(args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let args = input::Args::parse(args);
-    let data = input::Datatype::parse(input);
+    let dt = input::Datatype::parse(input);
+    let env = algebra::Env::new();
+
+    let alg = algebra::generate::<foldable::Foldable>(&env, &dt);
 
 //    let alg = ftable::generate(&args, &data);
 
     let expanded = quote! {
-        #data
+        #dt
 
-//        #alg
+        #alg
     };
 
     expanded.into()

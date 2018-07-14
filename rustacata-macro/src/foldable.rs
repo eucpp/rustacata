@@ -1,11 +1,15 @@
 
-use syn::{parse, Ident, Expr, Variant, Type, GenericParam, WherePredicate};
+use proc_macro2::{Span, TokenStream};
+
+use syn::parse;
+use syn::{Ident, Expr, FnArg, Fields, Field, Variant, Type, Pat, Arm, GenericParam, WherePredicate, ItemFn, FieldValue};
 use syn::token::{Comma};
 use syn::punctuated::{Punctuated};
 
 use algebra::{Env, Algebra};
+use input::{Datatype};
 
-struct Foldable;
+pub struct Foldable;
 
 impl Algebra for Foldable {
     fn trait_name(_env: &Env, _dt: &Datatype) -> Ident {
@@ -13,7 +17,7 @@ impl Algebra for Foldable {
     }
 
     fn struct_name(_env: &Env, dt: &Datatype) -> Ident {
-        Ident::new(&format!("{}Fold", *ident), Span::call_site())
+        Ident::new(&format!("{}Fold", dt.ident()), Span::call_site())
     }
 
     fn result_type(env: &Env, dt: &Datatype) -> Type {

@@ -4,7 +4,7 @@ extern crate proc_macro2;
 extern crate syn;
 extern crate quote;
 
-use syn::{Item, ItemStruct, ItemEnum, Variant, Ident};
+use syn::{Item, ItemStruct, ItemEnum, Variant, Ident, Type};
 use quote::{ToTokens};
 
 pub struct Args(());
@@ -27,6 +27,18 @@ impl Datatype {
             Item::Enum(item) => Datatype::Enum(item),
             _ => unimplemented!(),
         }
+    }
+
+    pub fn ident(&self) -> Ident {
+        match *self {
+            Datatype::Enum(ref item) => item.ident.clone(),
+            _ => unimplemented!(),
+        }
+    }
+
+    pub fn ty(&self) -> Type {
+        let ident = self.ident();
+        parse_quote! { #ident }
     }
 }
 
