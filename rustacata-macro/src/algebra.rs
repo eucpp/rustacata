@@ -23,6 +23,10 @@ impl Env {
         parse_quote! { &'b #arg_ty }
     }
 
+    pub fn argument_pat(&self, ident: &Ident) -> Pat {
+        parse_quote! { ref #ident }
+    }
+
     pub fn default_result_ty(&self) -> Type {
         parse_quote! { B }
     }
@@ -56,7 +60,7 @@ pub trait Algebra {
 }
 
 fn generate<Alg: Algebra>(env: &Env, dt: &Datatype) -> TokenStream {
-    let self_ty = env.datatype_ty(dt);
+    let dt_ty = env.datatype_ty(dt);
 
     let alg_trait_name = Alg::trait_name(env, dt);
     let alg_struct_name = Alg::struct_name(env, dt);
@@ -72,9 +76,10 @@ fn generate<Alg: Algebra>(env: &Env, dt: &Datatype) -> TokenStream {
     let alg_fields = apply_to_variants(env, dt, field::<Alg>);
     let alg_setters = apply_to_variants(env, dt, setter::<Alg>);
     let alg_inits = apply_to_variants(env, dt, initializer::<Alg>);
+    let match_arms = apply_to_variants(env, dt, match_arm::<Alg>);
 
     quote! {
-        struct #alg_struct<'a, #generics> {
+        struct #alg_struct<'a, #alg_generics> {
             #(#alg_fields),*
         }
 
@@ -82,16 +87,15 @@ fn generate<Alg: Algebra>(env: &Env, dt: &Datatype) -> TokenStream {
             #(#alg_setters),*
         }
 
-        impl<'a, #all_generics> Transformer<#self_ty, #alg_result_ty>
+        impl<'a, #all_generics> Transformer<#dt_ty, #alg_result_ty>
         for #alg_struct<'a, #alg_generics>
         where #all_generics_bounds {
-
-            fn transform(&self, x: #self_ty) -> #alg_result_ty {
-                self.0.transform(x)
+            fn transform(&self, #dt_arg: #dt_ty) -> #alg_result_ty {
+                #(#match_arms),*
             }
         }
 
-        impl <#alg_generics_bounds> #alg_trait<#alg_generics> for #self_ty {
+        impl <#alg_generics_bounds> #alg_trait<#alg_generics> for #dt_ty {
             type Tr = #alg_struct<'static, #alg_generics>;
 
             fn transformer() -> Self::Tr {
@@ -103,7 +107,7 @@ fn generate<Alg: Algebra>(env: &Env, dt: &Datatype) -> TokenStream {
     }
 }
 
-fn apply_to_variants<F, R>(env: Env, dt: Datatype, f: F) -> Iter<Item = R>
+fn apply_to_variants<F, R>(env: &Env, dt: &Datatype, f: F) -> Iter<Item = R>
     where
         F: Fn(&Env, &Datatype, &Ident, &Fields) -> R
 {
@@ -115,15 +119,13 @@ fn apply_to_variants<F, R>(env: Env, dt: Datatype, f: F) -> Iter<Item = R>
     }
 }
 
-fn field_fn_ty<Alg: Algebra>(env: &Env, dt: &Datatype, fields: &Fields) -> Type {
-    let dt_ty = env.datatype_ty(dt);
-    let r_ty = Alg::result_type(env, dt);
+fn match_arm<Alg: Algebra>(env: &Env, dt: &Datatype, ident: Ident, fields: &Fields) -> Arm {
+    let field_name = Alg::field_name(env, ident);
+    let pat = match_pat(env, dt, ident, fields);
+    let args = arg_names(env, dt, ident, fields);
 
-    let dt_tr = quote! { Transformer<#dt_ty, #r_ty> };
-    let args = fields.iter().map(|field| env.argument_ty(field));
-
-    quote! {
-        for<'b> Fn(#dt_tr, #(#args),*) -> #r_ty
+    parse_quote! {
+        #pat => (self.#field_name)(self, #args)
     }
 }
 
@@ -131,7 +133,7 @@ fn field<Alg: Algebra>(env: &Env, dt: Datatype, ident: Ident, fields: &Fields) -
     let field_name = Alg::field_name(env, ident);
     let field_fn_ty = field_fn_ty(env, dt, fields);
 
-    quote! {
+    parse_quote! {
         #field_name : Box<'a + #field_fn_ty>
     }
 }
@@ -165,6 +167,38 @@ fn initializer<Alg: Algebra>(env: &Env, dt: &Datatype, ident: &Ident, fields: &F
 }
 
 fn initializer_arguments(env: &Env, dt: &Datatype, fields: &Fields) -> Iter<Item = FnArg> {
+    arg_names(env, dt, ident, fields)
+        .zip(fields.iter().map(|field| env.argument_ty(field)))
+        .map(|arg, ty| parse_quote! { #arg: #ty })
+}
+
+fn match_pat(env: &Env, dt: &Datatype, ident: &Ident, fields: &Fields) -> Pat {
+    let args = arg_names(env, dt, ident, fields)
+        .map(|arg| env.argument_pat(arg));
+
+    match fields {
+        Fields::Unnamed(_) => {
+            parse_quote! {
+                #ident(#(#args),*)
+            }
+        },
+        _ => unimpelmented!(),
+    }
+}
+
+fn field_fn_ty<Alg: Algebra>(env: &Env, dt: &Datatype, fields: &Fields) -> Type {
+    let dt_ty = env.datatype_ty(dt);
+    let r_ty = Alg::result_type(env, dt);
+
+    let dt_tr = quote! { Transformer<#dt_ty, #r_ty> };
+    let args = fields.iter().map(|field| env.argument_ty(field));
+
+    parse_quote! {
+        for<'b> Fn(#dt_tr, #(#args),*) -> #r_ty
+    }
+}
+
+fn arg_names(env: &Env, dt: &Datatype, ident: Ident, fields: &Fields) -> Iter<Item = Ident> {
     let mut cnt = 0;
 
     let gen = || {
@@ -173,11 +207,6 @@ fn initializer_arguments(env: &Env, dt: &Datatype, fields: &Fields) -> Iter<Item
     };
 
     fields.iter().map(|field| {
-        let arg = if let Some(ident) = field.ident { ident } else { gen() };
-        let ty = env.argument_ty(field);
-
-        parse_quote! {
-            #arg: #ty
-        }
+        if let Some(ident) = field.ident { ident } else { gen() };
     })
 }

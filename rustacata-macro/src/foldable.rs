@@ -22,7 +22,7 @@ impl Algebra for Foldable {
 
     fn generics(env: &Env, dt: &Datatype) -> Punctuated<GenericParam, Comma> {
         let r_ty = env.default_result_ty();
-        parse( quote! { #r_ty } ).unwrap()
+        parse_quote! { #r_ty }
     }
 
     fn generics_bounds(env: &Env, dt: &Datatype) -> Punctuated<WherePredicate, Comma> {
@@ -38,6 +38,6 @@ impl Algebra for Foldable {
     }
 
     fn initializer_body(_env: &Env, ident: &Ident, _args: &Vec<FnArg>) -> Expr {
-        parse( quote! { unimplemented!() }).unwrap()
+        parse_quote! { unimplemented!() }
     }
 }
