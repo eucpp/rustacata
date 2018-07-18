@@ -172,21 +172,22 @@ fn setter<'a, 'b, Alg: Algebra>(env: &'a Env, dt: &'b Datatype, ident: &'b Ident
 }
 
 fn initializer<'a, 'b, Alg: Algebra>(env: &'a Env, dt: &'b Datatype, ident: &'b Ident, fields: &'b Fields) -> FieldValue {
-    let mut args = initializer_arguments(env, dt, ident, fields);
+    let args = initializer_arguments(env, dt, ident, fields);
 
     let field = Alg::field_name(env, ident);
-    let body: Expr = parse_quote! { unimplemented!() };
-//    let body = Alg::initializer_body(env, ident, &Vec::from_iter(args.by_ref().map(|x| x.clone())));
+//    let body: Expr = parse_quote! { unimplemented!() };
+    let body = Alg::initializer_body(env, ident, &args);
 
     parse_quote! {
         #field: Box::new(|tr, #(#args),*| #body)
     }
 }
 
-fn initializer_arguments<'a>(env: &'a Env, dt: &'a Datatype, ident: &'a Ident, fields: &'a Fields) -> impl 'a + Iterator<Item = FnArg> {
+fn initializer_arguments<'a>(env: &'a Env, dt: &'a Datatype, ident: &'a Ident, fields: &'a Fields) -> Vec<FnArg> {
     arg_names(env, dt, ident, fields)
         .zip(fields.iter().map(move |field| env.initializer_arg_ty(field)))
         .map(|(arg, ty)| parse_quote! { #arg: #ty })
+        .collect()
 }
 
 fn match_pat(env: &Env, dt: &Datatype, ident: &Ident, fields: &Fields) -> Pat {
