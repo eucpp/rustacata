@@ -1,5 +1,9 @@
 
 use syn::{Ident, Type, Pat, Field, Lifetime, PredicateLifetime};
+use syn::token::{Comma};
+use syn::punctuated::{Punctuated};
+
+use input::Datatype;
 
 pub trait TraversePolicy {
     fn datatype_ty(&self, dt: &Datatype) -> Type;
@@ -12,9 +16,9 @@ pub trait TraversePolicy {
 
     fn initializer_arg_ty(&self, field: &Field) -> Type;
 
-    fn lifetimes(&self, dt: &Datatype) -> Vec<Lifetime>;
+    fn lifetimes(&self, dt: &Datatype) -> Punctuated<Lifetime, Comma>;
 
-    fn lifetimes_bounds(&self, dt: &Datatype) -> Vec<PredicateLifetime>;
+    fn lifetimes_bounds(&self, dt: &Datatype) -> Punctuated<PredicateLifetime, Comma>;
 }
 
 pub struct BorrowTraverse(());
@@ -49,13 +53,12 @@ impl TraversePolicy for BorrowTraverse {
         parse_quote! { &#arg_ty }
     }
 
-    fn lifetimes(&self, dt: &Datatype) -> Vec<Lifetime> {
-        vec![
-            parse_quote! { 'b },
-        ]
+    fn lifetimes(&self, dt: &Datatype) -> Punctuated<Lifetime, Comma> {
+        parse_quote! { 'b }
     }
 
-    fn lifetimes_bounds(&self, dt: &Datatype) -> Vec<PredicateLifetime> {
-        vec![]
+    fn lifetimes_bounds(&self, dt: &Datatype) -> Punctuated<PredicateLifetime, Comma> {
+//        parse_quote! { }
+        Punctuated::new()
     }
 }

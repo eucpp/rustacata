@@ -6,42 +6,48 @@ use syn::{Ident, Expr, FnArg, Fields, Field, Variant, Type, Pat, Arm, GenericPar
 use syn::token::{Comma};
 use syn::punctuated::{Punctuated};
 
-use algebra::{Env, Algebra};
+use algebra::{Algebra};
 use input::{Datatype};
 
-pub struct Foldable;
+pub struct Foldable(());
+
+impl Foldable {
+    pub fn new() -> Self {
+        Foldable(())
+    }
+}
 
 impl Algebra for Foldable {
-    fn trait_name(_env: &Env, _dt: &Datatype) -> Ident {
+
+    fn trait_name(&self, _dt: &Datatype) -> Ident {
         Ident::new("Foldable", Span::call_site())
     }
 
-    fn struct_name(_env: &Env, dt: &Datatype) -> Ident {
+    fn struct_name(&self, dt: &Datatype) -> Ident {
         Ident::new(&format!("{}Fold", dt.ident()), Span::call_site())
     }
 
-    fn result_type(env: &Env, dt: &Datatype) -> Type {
-        env.default_result_ty()
+    fn result_type(&self, dt: &Datatype) -> Type {
+        parse_quote! { B }
     }
 
-    fn generics(env: &Env, dt: &Datatype) -> Punctuated<GenericParam, Comma> {
-        let r_ty = env.default_result_ty();
-        parse_quote! { #r_ty }
+    fn generics(&self, dt: &Datatype) -> Punctuated<GenericParam, Comma> {
+        parse_quote! { B }
     }
 
-    fn generics_bounds(env: &Env, dt: &Datatype) -> Punctuated<WherePredicate, Comma> {
+    fn generics_bounds(&self, dt: &Datatype) -> Punctuated<WherePredicate, Comma> {
         Punctuated::new()
     }
 
-    fn field_name(_env: &Env, ident: &Ident) -> Ident {
+    fn field_name(&self, ident: &Ident) -> Ident {
         Ident::new(&format!("fold_{}", ident).to_lowercase(), Span::call_site())
     }
 
-    fn setter_name(_env: &Env, ident: &Ident) -> Ident {
+    fn setter_name(&self, ident: &Ident) -> Ident {
         Ident::new(&format!("with_fold_{}", ident).to_lowercase(), Span::call_site())
     }
 
-    fn initializer_body(_env: &Env, ident: &Ident, _args: &Vec<FnArg>) -> Expr {
+    fn initializer_body(&self, ident: &Ident, _args: &Vec<FnArg>) -> Expr {
         parse_quote! { unimplemented!() }
     }
 }

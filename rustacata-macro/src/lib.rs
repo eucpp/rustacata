@@ -16,22 +16,27 @@ use proc_macro2::{Span, TokenStream};
 
 mod input;
 mod algebra;
+mod traverse;
+mod catamorphism;
 mod foldable;
+mod utils;
+
+use foldable::Foldable;
+use traverse::BorrowTraverse;
+use catamorphism::Catamorphism;
 
 #[proc_macro_attribute]
 pub fn cata(args: proc_macro::TokenStream, input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let args = input::Args::parse(args);
     let dt = input::Datatype::parse(input);
-    let env = algebra::Env::new();
 
-    let alg = algebra::generate::<foldable::Foldable>(&env, &dt);
+    let alg = Foldable::new();
+    let trv = BorrowTraverse::new();
+    let cata = Catamorphism::new(alg, trv, dt).codegen();
 
-//    let alg = ftable::generate(&args, &data);
 
     let expanded = quote! {
-        #dt
-
-        #alg
+        #cata
     };
 
     expanded.into()
