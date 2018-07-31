@@ -100,11 +100,11 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
     }
 
     fn alg_trait_name(&self) -> Ident {
-        self.alg.trait_name(&self.dt)
+        self.alg.trait_ident(&self.dt)
     }
 
     fn alg_struct_name(&self) -> Ident {
-        self.alg.struct_name(&self.dt)
+        self.alg.struct_ident(&self.dt)
     }
 
     fn alg_result_type(&self) -> Type {
@@ -119,7 +119,7 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
         let lifetimes = self.trv.lifetimes(&self.dt);
         let alg_generics = self.alg_generics();
 
-        parse_quote! { #(#lifetimes),* , #(#alg_generics),* }
+        parse_quote! { #(#lifetimes ,)* #(#alg_generics),* }
     }
 
     fn alg_generics_bounds(&self) -> Punctuated<WherePredicate, Comma> {
@@ -130,7 +130,7 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
         let lifetimes_bounds = self.trv.lifetimes_bounds(&self.dt);
         let alg_generics_bounds = self.alg.generics_bounds(&self.dt);
 
-        parse_quote! { #(#lifetimes_bounds),* #(#alg_generics_bounds),* }
+        parse_quote! { #(#lifetimes_bounds ,)* #(#alg_generics_bounds),* }
     }
 
     fn alg_fields(&self) -> FieldsNamed {
@@ -150,7 +150,7 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
     }
 
     fn alg_field_name(&self, ident: &Ident) -> Ident {
-        self.alg.field_name(ident)
+        self.alg.field_ident(ident)
     }
 
     fn alg_field_fn_ty(&self, ident: &Ident, fields: &Fields) -> Type {
@@ -184,7 +184,7 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
     }
 
     fn alg_setter_name(&self, ident: &Ident) -> Ident {
-        self.alg.setter_name(ident)
+        self.alg.setter_ident(ident)
     }
 
     fn alg_initializers(&self) -> Vec<FieldValue> {

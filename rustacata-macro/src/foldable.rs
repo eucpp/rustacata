@@ -19,11 +19,11 @@ impl Foldable {
 
 impl Algebra for Foldable {
 
-    fn trait_name(&self, _dt: &Datatype) -> Ident {
+    fn trait_ident(&self, _dt: &Datatype) -> Ident {
         Ident::new("Foldable", Span::call_site())
     }
 
-    fn struct_name(&self, dt: &Datatype) -> Ident {
+    fn struct_ident(&self, dt: &Datatype) -> Ident {
         Ident::new(&format!("{}Fold", dt.ident()), Span::call_site())
     }
 
@@ -39,11 +39,11 @@ impl Algebra for Foldable {
         Punctuated::new()
     }
 
-    fn field_name(&self, ident: &Ident) -> Ident {
+    fn field_ident(&self, ident: &Ident) -> Ident {
         Ident::new(&format!("fold_{}", ident).to_lowercase(), Span::call_site())
     }
 
-    fn setter_name(&self, ident: &Ident) -> Ident {
+    fn setter_ident(&self, ident: &Ident) -> Ident {
         Ident::new(&format!("with_fold_{}", ident).to_lowercase(), Span::call_site())
     }
 
