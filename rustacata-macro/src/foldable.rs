@@ -15,6 +15,12 @@ impl Foldable {
     pub fn new() -> Self {
         Foldable(())
     }
+
+    fn result_type_param_ident(&self) {
+        Ident::new("B", Span::call_site())
+    }
+
+    fn
 }
 
 impl Algebra for Foldable {
@@ -32,7 +38,17 @@ impl Algebra for Foldable {
     }
 
     fn generics(&self, dt: &Datatype) -> Punctuated<GenericParam, Comma> {
-        parse_quote! { B }
+        let mut res = Punctuated::<GenericParam, Comma>::new();
+        let mut gen = GenericParamGen::new();
+
+        res.push(gen.generic_param(self.result_type_param()));
+
+        for param in dt.type_params() {
+            res.push(GenericParam::Type(param));
+            res.push(gen.generic_param(self.type_param(param)));
+        }
+
+        res
     }
 
     fn generics_bounds(&self, dt: &Datatype) -> Punctuated<WherePredicate, Comma> {
