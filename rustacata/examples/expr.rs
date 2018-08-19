@@ -3,14 +3,14 @@
 extern crate rustacata;
 extern crate rustacata_macro;
 
-use rustacata::{Transformer, Foldable};
+use rustacata::{Transformer, Foldable, Foldable1};
 use rustacata_macro::cata;
 
 #[cata]
-enum Expr {
-    Value(i32),
-    Add(Box<Expr>, Box<Expr>),
-    Mult(Box<Expr>, Box<Expr>),
+enum Expr<T> {
+    Value(T),
+    Add(Box<Expr<T>>, Box<Expr<T>>),
+    Mult(Box<Expr<T>>, Box<Expr<T>>),
 }
 
 fn main() {

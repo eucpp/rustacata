@@ -24,7 +24,9 @@ pub enum Datatype {
 
 impl Datatype {
     pub fn parse(input: proc_macro::TokenStream) -> Datatype {
+        println!("Here!!!");
         let input : Item = syn::parse(input).unwrap();
+        println!("There!!!");
         match input {
             Item::Enum(item) => Datatype::Enum(item),
             _ => unimplemented!(),

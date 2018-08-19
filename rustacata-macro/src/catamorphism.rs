@@ -28,14 +28,14 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
         let dt_ty = self.datatype_type();
         let dt_arg = self.datatype_arg_name();
         let dt_tr_ty = self.transformer_type();
-//
+
         let alg_trait = self.alg_trait_name();
         let alg_struct = self.alg_struct_name();
         let alg_result_ty = self.alg_result_type();
-//
+
         let alg_generics = self.alg_generics();
         let all_generics = self.all_generics();
-//
+
         let alg_generics_bounds = self.alg_generics_bounds();
         let all_generics_bounds = self.all_generics_bounds();
 //
@@ -46,13 +46,13 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
 
         quote! {
             #dt
-//
+
             struct #alg_struct<'a, #alg_generics> #alg_fields
-//
+
             impl<'a, #alg_generics> #alg_struct<'a, #alg_generics> {
                 #(#alg_setters)*
             }
-//
+
             impl<'a, #all_generics> #dt_tr_ty
             for #alg_struct<'a, #alg_generics>
             where #all_generics_bounds {
@@ -62,7 +62,7 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
                     }
                 }
             }
-//
+
             impl <#all_generics> #alg_trait<#alg_generics> for #dt_ty
             where #all_generics_bounds {
                 type Tr = #alg_struct<'static, #alg_generics>;
@@ -183,7 +183,7 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
         let ident = self.alg_transformer_field_name(&ty_param.ident);
 
         let transformer_ty = self.type_param_transformer_type(ty_param);
-        let typ = parse_quote! { Box<'a + &#transformer_ty> };
+        let typ = parse_quote! { Box<#transformer_ty> };
 
         (ident, typ)
     }
