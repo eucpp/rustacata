@@ -1,5 +1,5 @@
 
-use syn::{Ident, Type, Pat, Field, Lifetime, PredicateLifetime};
+use syn::{Ident, Type, Pat, Field, Lifetime, PredicateLifetime, TypeParam};
 use syn::token::{Comma};
 use syn::punctuated::{Punctuated};
 
@@ -13,6 +13,8 @@ pub trait TraversePolicy {
     fn fn_type(&self, ty: &Type) -> Type;
 
     fn fn_arg_type(&self, field: &Field) -> Type;
+
+    fn type_param_type(&self, ty_param: &TypeParam) -> Type;
 
     fn initializer_arg_ty(&self, field: &Field) -> Type;
 
@@ -46,6 +48,11 @@ impl TraversePolicy for BorrowTraverse {
     fn fn_arg_type(&self, field: &Field) -> Type {
         let arg_ty = &field.ty;
         parse_quote! { &'b #arg_ty }
+    }
+
+    fn type_param_type(&self, ty_param: &TypeParam) -> Type {
+        let ident = &ty_param.ident;
+        parse_quote! { &'b #ident }
     }
 
     fn initializer_arg_ty(&self, field: &Field) -> Type {

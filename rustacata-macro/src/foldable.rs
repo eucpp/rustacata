@@ -1,13 +1,13 @@
-
 use proc_macro2::{Span, TokenStream};
 
 use syn::parse;
-use syn::{Ident, Expr, FnArg, Fields, Field, Variant, Type, Pat, Arm, GenericParam, WherePredicate, ItemFn, FieldValue};
+use syn::{Ident, Expr, FnArg, Fields, Field, Variant, Type, Pat, Arm, GenericParam, WherePredicate, ItemFn, FieldValue, TypeParam};
 use syn::token::{Comma};
 use syn::punctuated::{Punctuated};
 
 use algebra::{Algebra};
 use input::{Datatype};
+use utils::{IdentMangler};
 
 pub struct Foldable(());
 
@@ -16,17 +16,30 @@ impl Foldable {
         Foldable(())
     }
 
-    fn result_type_param_ident(&self) {
-        Ident::new("B", Span::call_site())
+    fn rename_ty(s: &str) -> String {
+        format!{"{}__", s}
     }
 
-    fn
+    fn result_type_ident(&self) -> Ident {
+        Ident::new(&Self::rename_ty("R"), Span::call_site())
+    }
+
+    fn type_param_mangler(&self) -> IdentMangler<'static> {
+        let mut mangler = IdentMangler::new(|s| Self::rename_ty(&s));
+        mangler.reserve(&self.result_type_ident());
+        mangler
+    }
 }
 
 impl Algebra for Foldable {
 
-    fn trait_ident(&self, _dt: &Datatype) -> Ident {
-        Ident::new("Foldable", Span::call_site())
+    fn trait_ident(&self, dt: &Datatype) -> Ident {
+        let n = dt.type_params().count();
+        if n == 0 {
+            Ident::new("Foldable", Span::call_site())
+        } else {
+            Ident::new(&format!("Foldable{}", n), Span::call_site())
+        }
     }
 
     fn struct_ident(&self, dt: &Datatype) -> Ident {
@@ -34,18 +47,24 @@ impl Algebra for Foldable {
     }
 
     fn result_type(&self, dt: &Datatype) -> Type {
-        parse_quote! { B }
+        let ident = self.result_type_ident();
+        parse_quote! { #ident }
     }
 
     fn generics(&self, dt: &Datatype) -> Punctuated<GenericParam, Comma> {
         let mut res = Punctuated::<GenericParam, Comma>::new();
-        let mut gen = GenericParamGen::new();
 
-        res.push(gen.generic_param(self.result_type_param()));
+        let mut mangler = self.type_param_mangler();
+
+        let make_generic =
+            |ident: Ident| GenericParam::Type(TypeParam::from(ident));
+
+        res.push(make_generic(self.result_type_ident()));
 
         for param in dt.type_params() {
-            res.push(GenericParam::Type(param));
-            res.push(gen.generic_param(self.type_param(param)));
+            mangler.reserve(&param.ident);
+            res.push(GenericParam::Type(param.clone()));
+            res.push(make_generic(mangler.mangle(&param.ident)));
         }
 
         res
@@ -53,6 +72,7 @@ impl Algebra for Foldable {
 
     fn generics_bounds(&self, dt: &Datatype) -> Punctuated<WherePredicate, Comma> {
         Punctuated::new()
+//        dt.type_params_bounds()
     }
 
     fn field_ident(&self, ident: &Ident) -> Ident {

@@ -1,7 +1,7 @@
 
 use proc_macro2::{Span, TokenStream};
 
-use syn::{Ident, Expr, FnArg, Fields, FieldsNamed, Field, Variant, Type, Pat, Arm, GenericParam, WherePredicate, ItemFn, FieldValue};
+use syn::{Ident, Expr, FnArg, Fields, FieldsNamed, Field, Variant, Type, Pat, Arm, GenericParam, WherePredicate, ItemFn, FieldValue, TypeParam};
 use syn::token::{Comma};
 use syn::punctuated::{Punctuated};
 
@@ -88,11 +88,22 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
         self.trv.datatype_ty(&self.dt)
     }
 
+    fn type_param_type(&self, ty_param: &TypeParam) -> Type {
+        self.trv.type_param_type(ty_param)
+    }
+
     fn transformer_type(&self) -> Type {
         let dt_ty = self.datatype_type();
         let r_ty = self.alg_result_type();
 
         parse_quote! { Transformer<#dt_ty, #r_ty> }
+    }
+
+    fn type_param_transformer_type(&self, ty_param: &TypeParam) -> Type {
+        let i_ty = self.type_param_type(ty_param);
+        let r_ty = self.alg_result_type();
+
+        parse_quote! { Transformer<#i_ty, #r_ty> }
     }
 
     fn fn_arg_type(&self, field: &Field) -> Type {
@@ -134,7 +145,13 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
     }
 
     fn alg_fields(&self) -> FieldsNamed {
-        let fields = self.iter_variants(Self::alg_field);
+        let mut tranformer_fields = self.iter_type_params(Self::alg_transformer_field);
+        let mut variant_fields = self.iter_variants(Self::alg_variant_field);
+
+        let mut fields = Vec::new();
+        fields.append(&mut tranformer_fields);
+        fields.append(&mut variant_fields);
+
         let fields = fields.iter()
             .map(|(ident, ty)| {
                 quote! { #ident: #ty }
@@ -143,17 +160,17 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
         parse_quote! { { #(#fields),* } }
     }
 
-    fn alg_field(&self, ident: &Ident, fields: &Fields) -> (Ident, Type) {
-        let field_fn_ty = self.alg_field_fn_ty(ident, fields);
+    fn alg_variant_field(&self, ident: &Ident, fields: &Fields) -> (Ident, Type) {
+        let field_fn_ty = self.alg_variant_field_fn_ty(ident, fields);
 
-        (self.alg_field_name(ident), parse_quote! { Box<'a + #field_fn_ty> })
+        (self.alg_variant_field_name(ident), parse_quote! { Box<'a + #field_fn_ty> })
     }
 
-    fn alg_field_name(&self, ident: &Ident) -> Ident {
+    fn alg_variant_field_name(&self, ident: &Ident) -> Ident {
         self.alg.field_ident(ident)
     }
 
-    fn alg_field_fn_ty(&self, ident: &Ident, fields: &Fields) -> Type {
+    fn alg_variant_field_fn_ty(&self, ident: &Ident, fields: &Fields) -> Type {
         let dt_ty = self.datatype_type();
         let r_ty = self.alg_result_type();
         let dt_tr_ty = self.transformer_type();
@@ -162,16 +179,32 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
         self.trv.fn_type( &parse_quote! { Fn(&#dt_tr_ty, #(#args),*) -> #r_ty } )
     }
 
+    fn alg_transformer_field(&self, ty_param: &TypeParam) -> (Ident, Type) {
+        let ident = self.alg_transformer_field_name(&ty_param.ident);
+
+        let transformer_ty = self.type_param_transformer_type(ty_param);
+        let typ = parse_quote! { Box<'a + &#transformer_ty> };
+
+        (ident, typ)
+    }
+
+    fn alg_transformer_field_name(&self, ident: &Ident) -> Ident {
+        Ident::new(
+            &format!("tr_{}", ident.to_string().to_lowercase()),
+            Span::call_site()
+        )
+    }
+
     fn alg_setters(&self) -> Vec<ItemFn> {
         self.iter_variants(Self::alg_setter)
     }
 
     fn alg_setter(&self, ident: &Ident, fields: &Fields) -> ItemFn {
         let struct_name = self.alg_struct_name();
-        let field_name = self.alg_field_name(ident);
+        let field_name = self.alg_variant_field_name(ident);
         let setter_name = self.alg_setter_name(ident);
 
-        let field_fn_ty = self.alg_field_fn_ty(ident, fields);
+        let field_fn_ty = self.alg_variant_field_fn_ty(ident, fields);
 
         parse_quote! {
             fn #setter_name<'c: 'a, F>(self, f: F) -> Self
@@ -188,17 +221,40 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
     }
 
     fn alg_initializers(&self) -> Vec<FieldValue> {
-        self.iter_variants(Self::alg_initializer)
+        let mut transformer_initializers = Vec::new(); // self.iter_type_params(Self::alg_transformer_field_initializer);
+        let mut variant_initializers = self.iter_variants(Self::alg_variant_field_initializer);
+
+        let mut initializers = Vec::new();
+        initializers.append(&mut transformer_initializers);
+        initializers.append(&mut variant_initializers);
+
+        initializers
     }
 
-    fn alg_initializer(&self, ident: &Ident, fields: &Fields) -> FieldValue {
-        let field = self.alg_field_name(ident);
+//    fn alg_transformer_field_initializer(&self, ty_param: &TypeParam) -> FieldValue {
+//        self.alg.transformer_field_initializer(ty_param)
+//    }
+
+    fn alg_variant_field_initializer(&self, ident: &Ident, fields: &Fields) -> FieldValue {
+        let field = self.alg_variant_field_name(ident);
+        let transformers = self.alg_initializer_transformers();
         let args = self.alg_initializer_args(ident, fields);
         let body = self.alg_initializer_body(ident, &args);
 
         parse_quote! {
-            #field: Box::new(|tr, #(#args),*| { #body })
+            #field: Box::new(|tr, #(#transformers,)* #(#args,)*| { #body })
         }
+    }
+
+    fn alg_initializer_transformers(&self) -> Vec<FnArg> {
+        self.iter_type_params(Self::alg_initializer_transformer)
+    }
+
+    fn alg_initializer_transformer(&self, ty_param: &TypeParam) -> FnArg {
+        let ident = self.alg_transformer_field_name(&ty_param.ident);
+        let ty = self.type_param_transformer_type(ty_param);
+
+        parse_quote! { #ident: #ty }
     }
 
     fn alg_initializer_args(&self, ident: &Ident, fields: &Fields) -> Vec<FnArg> {
@@ -216,7 +272,7 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
     }
 
     fn alg_match_arm(&self, ident: &Ident, fields: &Fields) -> Arm {
-        let field = self.alg_field_name(ident);
+        let field = self.alg_variant_field_name(ident);
         let pat = self.alg_match_pat(ident, fields);
         let args = ArgGen::new().iter_fields(fields, ArgGen::ident);
 
@@ -248,6 +304,18 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
         match self.dt {
             Datatype::Enum(ref item) => item.variants.iter().map(move |variant| {
                 f(self, &variant.ident, &variant.fields)
+            }),
+            _ => unimplemented!()
+        }.collect()
+    }
+
+    fn iter_type_params<'a, R: 'a, F: 'a>(&self, f: F) -> Vec<R>
+        where
+            F: Fn(&Self, &TypeParam) -> R,
+    {
+        match self.dt {
+            Datatype::Enum(ref item) => item.generics.type_params().map(move |ty_param| {
+                f(self, &ty_param)
             }),
             _ => unimplemented!()
         }.collect()

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 
 use syn::{Ident, Field, Pat, FnArg, GenericParam};
 use proc_macro2::{Span};
@@ -41,70 +41,36 @@ impl ArgGen {
     pub fn fn_arg<Trv: TraversePolicy>(&mut self, trv: &Trv, field: &Field) -> FnArg {
         let ident = self.ident(field);
         let ty = trv.initializer_arg_ty(field);
-//        let ty = &field.ty;
         parse_quote! { #ident: #ty }
     }
 
 }
 
-pub struct IdentMangler {
-    used : HashSet<Ident>
+pub struct IdentMangler<'a> {
+    used: HashSet<Ident>,
+    renamer: Box<'a + FnMut(String) -> String>,
 }
 
-impl IdentMangler {
-    pub fn new() -> Self {
+impl<'a> IdentMangler<'a> {
+    pub fn new<F: 'a + FnMut(String) -> String>(renamer: F) -> Self {
         IdentMangler {
             used: HashSet::new(),
+            renamer: Box::new(renamer),
         }
     }
 
-    pub fn mangle(&mut self, mut ident: Ident)-> Ident {
-        let mut i = 0;
-        while self.used.contains(ident) {
-            i = i + 1;
-            ident = Ident::new(
-                &format!{"{}_{}", ident, i},
-                ident.span()
-            )
-        }
-        self.used.insert(ident);
-        ident
-    }
-}
-
-pub struct GenericParamGen {
-    map: HashMap<Ident, GenericParam>
-}
-
-impl GenericParamGen {
-
-    pub fn generic_param(&mut self, hint: &GenericParam) -> GenericParam {
-        let ident =
-        if self.map.contains_key() {
-
-        }
-
-        match *hint {
-
-            GenericParam::Type(ref type_param) => {
-                if self.map.contains_key(type_param.ident) {
-                    let mangled = self.mangle_type_param(type_param);
-                    self.map.insert(mangled.ident.clone(), mangled.clone());
-                    GenericParam::Type(mangled)
-                } else {
-                    self.map.insert(type_param.ident.clone(), type_param.clone());
-                    hint.clone()
-                }
-            },
-
-            GenericParam::Lifetime(ref lifetime_def) => {
-
-            }
-        }
-
-        if self.map.contains_key(self.generic) {
-
-        }
+    pub fn reserve(&mut self, ident: &Ident) {
+        assert!(!self.used.contains(ident));
+        self.used.insert(ident.clone());
     }
 
+    pub fn mangle(&mut self, ident: &Ident)-> Ident {
+        let mangled = Ident::new(
+            &(self.renamer)(ident.to_string()),
+            ident.span()
+        );
+        assert!(!self.used.contains(&mangled));
+        self.used.insert(mangled.clone());
+        mangled
+    }
 }

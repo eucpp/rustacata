@@ -4,7 +4,9 @@ extern crate proc_macro2;
 extern crate syn;
 extern crate quote;
 
-use syn::{Item, ItemStruct, ItemEnum, Variant, Ident, Type};
+use std::iter::{Iterator};
+
+use syn::{Item, ItemStruct, ItemEnum, Variant, Ident, Type, TypeParam};
 use quote::{ToTokens};
 
 pub struct Args(());
@@ -39,6 +41,13 @@ impl Datatype {
     pub fn ty(&self) -> Type {
         let ident = self.ident();
         parse_quote! { #ident }
+    }
+
+    pub fn type_params(&self) -> impl Iterator<Item = &TypeParam> {
+        match self {
+            Datatype::Enum(ref item) => item.generics.type_params(),
+            _ => unimplemented!(),
+        }
     }
 }
 
