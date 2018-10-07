@@ -16,5 +16,5 @@ pub trait Foldable<R> : Sized {
 pub trait Foldable1<T, TR, R> : Sized {
     type Tr: Transformer<Self, R>;
 
-    fn transformer<TrT: Transformer<T, R>>(tr_t: TrT) -> Self::Tr;
+    fn transformer<TrT: Transformer<T, TR>>(tr_t: TrT) -> Self::Tr;
 }

@@ -42,7 +42,9 @@ impl Datatype {
 
     pub fn ty(&self) -> Type {
         let ident = self.ident();
-        parse_quote! { #ident }
+        let ty_params = self.type_params();
+
+        parse_quote! { #ident<#(#ty_params),*> }
     }
 
     pub fn type_params(&self) -> impl Iterator<Item = &TypeParam> {

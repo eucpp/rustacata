@@ -77,7 +77,6 @@ enum Expr {
     Value(i32),
     Add(Box<Expr>, Box<Expr>),
     Mult(Box<Expr>, Box<Expr>),
-    Test(Option<T>)
 }
 
 struct ExprFold<'a, I, S> {

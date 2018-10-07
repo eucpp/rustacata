@@ -6,6 +6,8 @@ use syn::punctuated::{Punctuated};
 use input::Datatype;
 
 pub trait TraversePolicy {
+    fn typ(&self, ty: &Type) -> Type;
+
     fn datatype_ty(&self, dt: &Datatype) -> Type;
 
     fn datatype_field_pat(&self, ident: &Ident) -> Pat;
@@ -32,6 +34,10 @@ impl BorrowTraverse {
 }
 
 impl TraversePolicy for BorrowTraverse {
+    fn typ(&self, ty: &Type) -> Type {
+        parse_quote! { &'b #ty }
+    }
+
     fn datatype_ty(&self, dt: &Datatype) -> Type {
         let dt_ty = dt.ty();
         parse_quote! { &'b #dt_ty }

@@ -8,7 +8,7 @@ use syn::punctuated::{Punctuated};
 use input::{Datatype, Args};
 use algebra::Algebra;
 use traverse::TraversePolicy;
-use utils::ArgGen;
+use utils::{ArgGen, TransformerGen};
 
 pub struct Catamorphism<Alg: Algebra, Trv: TraversePolicy> {
     dt: Datatype,
@@ -38,7 +38,7 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
 
         let alg_generics_bounds = self.alg_generics_bounds();
         let all_generics_bounds = self.all_generics_bounds();
-//
+
         let alg_fields = self.alg_fields();
         let alg_setters = self.alg_setters();
         let alg_inits = self.alg_initializers();
@@ -196,13 +196,36 @@ impl<Alg: Algebra, Trv: TraversePolicy> Catamorphism<Alg, Trv> {
     }
 
     fn alg_setters(&self) -> Vec<ItemFn> {
-        self.iter_variants(Self::alg_setter)
+        self.iter_variants(Self::alg_variant_setter)
     }
 
-    fn alg_setter(&self, ident: &Ident, fields: &Fields) -> ItemFn {
+    fn alg_variant_setter(&self, ident: &Ident, fields: &Fields) -> ItemFn {
         let struct_name = self.alg_struct_name();
         let field_name = self.alg_variant_field_name(ident);
         let setter_name = self.alg_setter_name(ident);
+
+        let field_fn_ty = self.alg_variant_field_fn_ty(ident, fields);
+
+        parse_quote! {
+            fn #setter_name<'c: 'a, F>(self, f: F) -> Self
+            where
+                F: 'c + #field_fn_ty
+            {
+                #struct_name { #field_name: Box::new(f), ..self }
+            }
+        }
+    }
+
+    fn alg_transformer_setter(&self, ty_par: &TypeParam) -> ItemFn {
+        let tr = TransformerGen::new(
+            self.type_param_type(ty_par),
+
+        )
+
+        let struct_name = self.alg_struct_name();
+        let field_name = self.alg_variant_field_name(ident);
+
+        let setter_name = tr.ident();
 
         let field_fn_ty = self.alg_variant_field_fn_ty(ident, fields);
 
