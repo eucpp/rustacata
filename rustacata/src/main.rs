@@ -23,45 +23,39 @@ trait Transformer<A, B> {
 //    fn tr_mult<F>(&self, fa: F, fb: F) -> A where F: FnOnce() -> A;
 //}
 
-struct ExprFold<'a, A> {
-    fold_value : Box<'a + for<'b> Fn(&'b i32) -> A>,
-    fold_add : Box<'a + for <'b> Fn(&'b dyn Fn() -> A, &'b dyn Fn() -> A) -> A>,
-    fold_mult : Box<'a + for <'b> Fn(&'b dyn Fn() -> A, &'b dyn Fn() -> A) -> A>,
+struct ExprFold<A> {
+    fold_value : for<'b> fn(&'b i32) -> A,
+    fold_add : for <'b> fn(&'b dyn Fn() -> A, &'b dyn Fn() -> A) -> A,
+    fold_mult : for <'b> fn(&'b dyn Fn() -> A, &'b dyn Fn() -> A) -> A,
 }
 
-impl<'a, A> ExprFold<'a, A> {
+impl<A> ExprFold<A> {
 
     fn new() -> Self {
         ExprFold {
-            fold_value: Box::new(|&i| unimplemented!()),
-            fold_add: Box::new(|e1, e2| unimplemented!()),
-            fold_mult: Box::new(|e1, e2| unimplemented!()),
+            fold_value: |&i| unimplemented!(),
+            fold_add: |e1, e2| unimplemented!(),
+            fold_mult: |e1, e2| unimplemented!(),
         }
     }
 
-    fn with_fold_value<'c: 'a, F>(self, f: F) -> Self
-        where
-            F: 'c + for<'b> Fn(&'b i32) -> A
+    fn with_fold_value(self, f: for<'b> fn(&'b i32) -> A) -> Self
     {
-        ExprFold { fold_value: Box::new(f), ..self }
+        ExprFold { fold_value: f, ..self }
     }
 
-    fn with_fold_add<'c: 'a, F>(self, f: F) -> Self
-        where
-            F: 'c + for <'b> Fn(&'b dyn Fn() -> A, &'b dyn Fn() -> A) -> A
+    fn with_fold_add(self, f: for <'b> fn(&'b dyn Fn() -> A, &'b dyn Fn() -> A) -> A) -> Self
     {
-        ExprFold { fold_add: Box::new(f), ..self }
+        ExprFold { fold_add: f, ..self }
     }
 
-    fn with_fold_mult<'c: 'a, F>(self, f: F) -> Self
-        where
-            F: 'c + for <'b> Fn(&'b dyn Fn() -> A, &'b dyn Fn() -> A) -> A
+    fn with_fold_mult(self, f: for <'b> fn(&'b dyn Fn() -> A, &'b dyn Fn() -> A) -> A) -> Self
     {
-        ExprFold { fold_mult: Box::new(f), ..self }
+        ExprFold { fold_mult: f, ..self }
     }
 }
 
-impl<'a, 'b, A> Transformer<&'b Expr, A> for ExprFold<'a, A> {
+impl<'b, A> Transformer<&'b Expr, A> for ExprFold<A> {
     fn transform(&self, x: &'b Expr) -> A {
         match *x {
             Expr::Value(ref v) => (self.fold_value)(v),
@@ -86,8 +80,7 @@ fn main() {
             *v
         })
         .with_fold_add(|e1, e2| {
-            let v1 = e1();
-            (*e1)() + (*e2)()
+            e1() + e2()
         })
         .with_fold_mult(|e1, e2| {
             e1() * e2()
