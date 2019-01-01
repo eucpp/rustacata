@@ -1,39 +1,65 @@
-#![feature(proc_macro)]
-
 // Expression AST type
 
-enum Bop { Add, Sub, Mul, Div, }
-
-enum Expr {
-    Value(i32),
-    Binop(Bop, Box<Expr>, Box<Expr>),
+#[derive(Copy, Clone)]
+pub enum Bop {
+    Add,
+    Sub,
+    Mul,
+    Div,
 }
 
-trait Gear<A, B> {
+pub enum Expr<T> {
+    Value(T),
+    Binop(Bop, Box<Expr<T>>, Box<Expr<T>>),
+}
+
+pub trait Gear<A, B> {
     fn apply(&mut self, x: A) -> B;
+}
+
+//impl<A, B> Gear<A, B> for Fn(A) -> B {
+//    fn apply(&mut self, x: A) -> B {
+//        (self)(x)
+//    }
+//}
+
+impl<A, B, F> Gear<A, B> for F
+    where F : FnMut(A) -> B {
+    fn apply(&mut self, x: A) -> B {
+        (self)(x)
+    }
 }
 
 mod expr {
     use std::marker::PhantomData;
 
     pub trait Folder<A> {
-        fn value(&mut self, x: &i32) -> A;
-        fn binop(&mut self, op: &::Bop, a: A, b: A) -> A;
+        fn value(&mut self, a: A) -> A;
+        fn binop(&mut self, op: ::Bop, a: A, b: A) -> A;
     }
 
-    struct GearBox<A, F>
-        where F : Folder<A> {
-        folder : F,
-        pd : PhantomData<A>,
+    struct GearBox<A, F, T, GT>
+    where
+        F: Folder<A>,
+        GT: for <'a> ::Gear<&'a T, A>,
+    {
+        folder: F,
+        t_gear: GT,
+        pd: PhantomData<(A, T)>,
     }
 
-    impl<A, F> ::Gear<&::Expr, A> for GearBox<A, F>
-        where F : Folder<A> {
-        fn apply(&mut self, x : &::Expr) -> A {
+    impl<A, F, T, GT> ::Gear<&::Expr<T>, A> for GearBox<A, F, T, GT>
+        where
+            F: Folder<A>,
+            GT: for <'a> ::Gear<&'a T, A>,
+    {
+        fn apply(&mut self, x: &::Expr<T>) -> A {
             match *x {
-                ::Expr::Value(ref v) =>
-                    self.folder.value(v),
-                ::Expr::Binop(ref op, ref a, ref b) => {
+                ::Expr::Value(ref v) => {
+                    let a = self.t_gear.apply(v);
+                    self.folder.value(a)
+                }
+                ::Expr::Binop(op, ref a, ref b) => {
                     let a = self.apply(a);
                     let b = self.apply(b);
                     self.folder.binop(op, a, b)
@@ -42,21 +68,31 @@ mod expr {
         }
     }
 
-    pub fn gear<A, F>(folder : F) -> impl for<'a> ::Gear<&'a ::Expr, A>
-        where F : Folder<A> {
-        GearBox { folder, pd : PhantomData }
+    pub fn gear<A, F, T, GT>(folder: F, t_gear : GT) -> impl for<'a> ::Gear<&'a ::Expr<T>, A>
+    where
+        F: Folder<A>,
+        GT: for<'a> ::Gear<&'a T, A>,
+    {
+        GearBox {
+            folder,
+            t_gear,
+            pd: PhantomData,
+        }
     }
 }
 
 struct Evaluator();
 
-impl expr::Folder<i32> for Evaluator {
+struct Mapper1 {
 
-    fn value(&mut self, x: &i32) -> i32 {
-        *x
+}
+
+impl expr::Folder<i32> for Evaluator {
+    fn value(&mut self, x: i32) -> i32 {
+        x
     }
 
-    fn binop(&mut self, op: &::Bop, a: i32, b: i32) -> i32 {
+    fn binop(&mut self, op: Bop, a: i32, b: i32) -> i32 {
         match op {
             Bop::Add => a + b,
             Bop::Sub => a - b,
@@ -67,7 +103,7 @@ impl expr::Folder<i32> for Evaluator {
 }
 
 fn main() {
-    let mut eval = expr::gear(Evaluator());
+    let mut eval = expr::gear(Evaluator(), |x: &i32| *x);
 
     // 2 * (7 + 1) = 16
     let e = Expr::Binop(
@@ -76,8 +112,8 @@ fn main() {
         Box::new(Expr::Binop(
             Bop::Add,
             Box::new(Expr::Value(7)),
-            Box::new(Expr::Value(1))
-        ))
+            Box::new(Expr::Value(1)),
+        )),
     );
 
     println!("result: {}", eval.apply(&e));
