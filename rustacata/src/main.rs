@@ -1,6 +1,6 @@
 // Expression AST type
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Bop {
     Add,
     Sub,
@@ -8,6 +8,7 @@ pub enum Bop {
     Div,
 }
 
+#[derive(Debug)]
 pub enum Expr<T> {
     Value(T),
     Binop(Bop, Box<Expr<T>>, Box<Expr<T>>),
@@ -16,12 +17,6 @@ pub enum Expr<T> {
 pub trait Gear<A, B> {
     fn apply(&mut self, x: A) -> B;
 }
-
-//impl<A, B> Gear<A, B> for Fn(A) -> B {
-//    fn apply(&mut self, x: A) -> B {
-//        (self)(x)
-//    }
-//}
 
 impl<A, B, F> Gear<A, B> for F
     where F : FnMut(A) -> B {
@@ -79,13 +74,82 @@ mod expr {
             pd: PhantomData,
         }
     }
+
+    struct Fused<A, F, GA>
+        where
+            F: Folder<A>,
+            GA: for<'a> ::Gear<&'a A, A>,
+    {
+        folder: F,
+        a_gear: GA,
+        pd: PhantomData<A>,
+    }
+
+    impl<A, F, GA> Folder<A> for Fused<A, F, GA>
+        where
+            F: Folder<A>,
+            GA: for<'a> ::Gear<&'a A, A>,
+    {
+        fn value(&mut self, a: A) -> A {
+            self.a_gear.apply(
+                &self.folder.value(a)
+            )
+        }
+
+        fn binop(&mut self, op: ::Bop, a: A, b: A) -> A {
+            self.a_gear.apply(
+                &self.folder.binop(op, a, b)
+            )
+        }
+    }
+
+    pub fn fuse<A, F, GA>(folder: F, a_gear : GA) -> impl Folder<A>
+        where
+            F: Folder<A>,
+            GA: for<'a> ::Gear<&'a A, A>,
+    {
+        Fused {
+            folder,
+            a_gear,
+            pd: PhantomData,
+        }
+    }
 }
 
 struct Evaluator();
 
-struct Mapper1 {
+struct Mapper1();
+struct Mapper2();
 
-}
+impl<T> expr::Folder<Expr<T>> for Mapper1
+    where
+        T: std::fmt::Debug
+    {
+        fn value(&mut self, a: ::Expr<T>) -> ::Expr<T> {
+            println!("Mapper1::value({:?})", a);
+            a
+        }
+
+        fn binop(&mut self, op: ::Bop, a: ::Expr<T>, b: ::Expr<T>) -> ::Expr<T> {
+            println!("Mapper1::binop({:?}, {:?}, {:?})", op, a, b);
+            ::Expr::Binop(op, Box::new(a), Box::new(b))
+        }
+    }
+
+impl<T> expr::Folder<Expr<T>> for Mapper2
+    where
+        T: std::fmt::Debug
+    {
+        fn value(&mut self, a: ::Expr<T>) -> ::Expr<T> {
+            println!("Mapper2::value({:?})", a);
+            a
+        }
+
+        fn binop(&mut self, op: ::Bop, a: ::Expr<T>, b: ::Expr<T>) -> ::Expr<T> {
+            println!("Mapper2::binop({:?}, {:?}, {:?})", op, a, b);
+            ::Expr::Binop(op, Box::new(a), Box::new(b))
+        }
+    }
 
 impl expr::Folder<i32> for Evaluator {
     fn value(&mut self, x: i32) -> i32 {
@@ -117,4 +181,18 @@ fn main() {
     );
 
     println!("result: {}", eval.apply(&e));
+
+    let mut map1 = expr::gear(Mapper1(), |x: &i32| { Expr::Value(*x) });
+    let mut map2 = expr::gear(Mapper2(), |x: &i32| { Expr::Value(*x) });
+
+    println!("Map1");
+    map1.apply(&e);
+
+    println!("Map2");
+    map2.apply(&e);
+
+    let mut fused = expr::gear(expr::fuse(Mapper1(), map2), |x: &i32| { Expr::Value(*x) });
+
+    println!("Fused");
+    fused.apply((&e));
 }
